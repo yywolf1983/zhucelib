@@ -16,9 +16,9 @@ local.properties
 **/outputs/
 **/intermediates/
 
-# Signing configs
-**/signing/
-**/keys/*.pem
+# Keys
+**/keys/
+!demo-app/keys/test_pub.pem
 
 # OS
 .DS_Store
