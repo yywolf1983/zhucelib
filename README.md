@@ -1,53 +1,69 @@
-# Android 注册系统 - 使用说明
+# Android 注册系统
 
-## 一、项目结构
+基于 RSA-2048 的 Android 应用注册验证系统，包含注册库和注册机两个组件。
+
+## 项目结构
 
 ```
 anddex/
-├── registration-lib/       # 注册库(AAR)
-│   └── src/main/java/com/reggate/lib/
-│       ├── CryptoUtils.java          # RSA-2048 验签
-│       ├── RegistrationManager.java  # 核心状态管理
-│       ├── RegGateConfig.java        # 配置类(默认值写死)
-│       ├── RegGateApplication.java   # 基类(自动守卫)
-│       ├── RegistrationGateActivity.java  # 入口界面
-│       ├── License.java              # License 数据模型
-│       └── Base32.java               # Crockford Base32 编解码
-├── keygen-app/             # 注册机(APK)
+├── registration-lib/          # 注册库(AAR) - 核心验证逻辑
+│   ├── src/main/java/com/reggate/lib/
+│   │   ├── CryptoUtils.java           # RSA-2048 验签
+│   │   ├── RegistrationManager.java   # 核心状态管理
+│   │   ├── RegGateConfig.java         # 配置类(默认值写死)
+│   │   ├── RegGateApplication.java    # 基类(自动守卫)
+│   │   ├── RegistrationGateActivity.java  # 入口界面
+│   │   ├── TrialDialogActivity.java   # 试用弹窗
+│   │   ├── License.java               # License 数据模型
+│   │   └── Base32.java                # Crockford Base32 编解码
+│   └── src/main/res/raw/reggate_pub_key.txt  # 内置公钥
+├── keygen-app/                # 注册机(APK) - 生成激活码
 │   └── src/main/java/com/keygen/app/
-│       ├── KeygenUtils.java          # RSA 签名与激活码生成
-│       ├── Base32.java               # Crockford Base32 编解码
-│       └── MainActivity.java         # 注册机 UI(私钥文件选择)
-├── requirements.md         # 需求文档
-└── README.md               # 使用说明(本文档)
+│       ├── KeygenUtils.java           # RSA 签名与激活码生成
+│       ├── Base32.java                # Crockford Base32 编解码
+│       └── MainActivity.java          # 注册机 UI
+├── demo-app/                  # 演示应用
+│   ├── build.sh              # 构建脚本
+│   └── src/main/java/com/reggate/demo/
+│       ├── DemoApplication.java       # 初始化示例
+│       └── MainActivity.java          # 状态展示界面
+├── generate_keys.sh          # RSA 密钥生成脚本
+├── build.sh                  # 项目构建脚本
+├── requirements.md           # 需求文档
+└── README.md                 # 使用说明
 ```
 
-## 二、准备工作
+## 快速开始
 
-### 2.1 生成 RSA 密钥对
+### 1. 生成密钥对
 
 ```bash
-# 生成私钥(PKCS#8,推荐)
-openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
-
-# 提取公钥
-openssl rsa -pubout -in private.pem -out public.pem
+./generate_keys.sh
 ```
 
-### 2.2 公钥配置
+生成的文件：
+- `keys/reggate_priv.pem` - 私钥（注册机使用）
+- `keys/reggate_pub.pem` - 公钥（参考）
+- `keys/reggate_pub_base64.txt` - Base64 公钥
 
-打开注册机 APK,选择私钥文件 `private.pem`,复制导出的公钥,然后粘贴到注册库配置中。
+### 2. 配置公钥
 
-> **安全模型**:
-> - 公钥写死在编译后的 APK 中,源码公开不影响安全性
-> - 私钥由注册机从本地文件动态加载,永不写入任何 APK
-> - 源码可公开,安全核心在于私钥
+将生成的公钥替换到 `registration-lib/src/main/res/raw/reggate_pub_key.txt`。
 
-## 三、注册库集成
+### 3. 构建项目
 
-### 3.1 引入依赖
+```bash
+./build.sh
+```
 
-在宿主 App 的 `build.gradle` 中添加:
+构建产物：
+- `registration-lib/build/outputs/aar/registration-lib-debug.aar`
+- `keygen-app/build/outputs/apk/debug/keygen-app-debug.apk`
+- `demo-app/build/outputs/apk/debug/demo-app-debug.apk`
+
+## 注册库集成
+
+### 步骤一：引入依赖
 
 ```gradle
 dependencies {
@@ -55,61 +71,30 @@ dependencies {
 }
 ```
 
-### 3.2 配置注册库
-
-**方式一:继承 RegGateApplication(推荐)**
-
-```java
-public class MyApplication extends RegGateApplication {
-    @Override
-    public void onCreate() {
-        // 必须在 super.onCreate() 之前初始化配置
-        RegGateConfig.init()
-            .publicKey("MIIBIjANBgkqhkiG9w0BAQEFAAO...")  // 必填:编译时写死的公钥
-            .mainActivity(MainActivity.class)               // 必填:注册通过后跳转的主界面
-            .trialDays(7)                                   // 覆盖默认:试用7天(默认3天)
-            .expireBehavior(RegGateConfig.ExpireBehavior.NAG_ONLY)  // 覆盖默认:到期只弹提示(默认BLOCK)
-            .build();  // 必须调用 build() 完成初始化
-        
-        super.onCreate();  // 父类会自动安装生命周期守卫
-    }
-}
-```
-
-**方式二:不继承基类,手动安装守卫**
+### 步骤二：初始化
 
 ```java
 public class MyApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        
-        // 先初始化配置
-        RegGateConfig.init()
-            .publicKey("MIIBIjANBgkqhkiG9w0BAQEFAAO...")
+        RegGateConfig.init(this)
             .mainActivity(MainActivity.class)
             .build();
-        
-        // 手动安装生命周期守卫
-        RegistrationManager manager = new RegistrationManager(this);
-        manager.installLifecycleGuard(this);
+        new RegistrationManager(this).installLifecycleGuard(this);
     }
 }
 ```
 
-### 3.3 修改启动入口
-
-在 `AndroidManifest.xml` 中:
+### 步骤三：修改启动入口
 
 ```xml
-<!-- 原来的主 Activity -->
 <activity android:name=".MainActivity">
     <intent-filter>
         <action android:name="android.intent.action.DEFAULT" />
     </intent-filter>
 </activity>
 
-<!-- 添加注册入口(置于主界面之前) -->
 <activity android:name="com.reggate.lib.RegistrationGateActivity">
     <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -118,152 +103,79 @@ public class MyApplication extends Application {
 </activity>
 ```
 
-### 3.4 业务级断言(可选)
+### 集成完成
 
-在关键业务方法前添加断言,未注册则终止进程:
+无需手动设置公钥，无需配置试用参数，所有配置由库自动完成。
 
-```java
-public void doPremiumFeature() {
-    RegistrationManager manager = new RegistrationManager(this);
-    manager.ensureRegistered();  // 未注册/过期则终止进程
-    // ... 业务逻辑
-}
-```
+## 配置项
 
-## 四、注册机使用
-
-### 4.1 启动注册机
-
-安装 `keygen-app` APK 到 Android 设备。
-
-### 4.2 选择私钥文件
-
-1. 点击「选择私钥文件」
-2. 从文件管理器选择之前生成的 `private.pem`
-3. 注册机自动加载并推导公钥
-
-### 4.3 生成激活码
-
-1. 客户机打开 App,获取安装码并复制
-2. 粘贴安装码到注册机的「客户机安装码」输入框
-3. 输入购买天数(0 = 永久)
-4. 点击「生成激活码」
-5. 复制激活码发回给客户机
-
-### 4.4 激活码格式
-
-激活码采用 Crockford Base32 编码,自动分组显示:
-
-```
-ABCDE-FGHIJ-KLMNO-PQRST-UVWXY-Z0123-45678-9ABC...
-```
-
-- 支持复制时自动去除 `-` 分隔符
-- 输入时自动进行字符容错(O→0、I/L→1)
-
-## 五、配置项说明
-
-| 方法 | 参数 | 默认值(写死) | 说明 |
+| 方法 | 参数 | 默认值 | 说明 |
 |---|---|---|---|
-| `publicKey()` | String | 无(必填) | 编译时写死的 RSA 公钥(Base64) |
 | `mainActivity()` | Class<?> | 无(必填) | 注册通过后跳转的主界面 |
-| `trialDays()` | int | 3 | 试用期天数,0=不试用 |
-| `promptTiming()` | PromptTiming | FIRST_LAUNCH | 注册框弹出时机 |
+| `trialDays()` | int | 7 | 试用期天数,0=不试用 |
+| `promptTiming()` | PromptTiming | EVERY_LAUNCH | 注册框弹出时机 |
 | `expireBehavior()` | ExpireBehavior | BLOCK | 到期后行为 |
-| `firstTrialDialogDelayMs()` | long | 0 | 首次弹框延迟(毫秒) |
 | `appName()` | String | "本应用" | 应用名称(UI展示) |
 
-**默认配置写死在库中,调用对应方法可覆盖:**
+**覆盖默认配置**：
 
 ```java
-// 仅设置必填项(使用所有默认值)
-RegGateConfig.init()
-    .publicKey("...")
+RegGateConfig.init(this)
     .mainActivity(MainActivity.class)
-    .build();
-
-// 覆盖部分默认配置
-RegGateConfig.init()
-    .publicKey("...")
-    .mainActivity(MainActivity.class)
-    .trialDays(7)                    // 覆盖默认:试用7天
-    .expireBehavior(NAG_ONLY)        // 覆盖默认:到期只弹提示
+    .trialDays(14)
+    .promptTiming(RegGateConfig.PromptTiming.FIRST_LAUNCH)
+    .expireBehavior(RegGateConfig.ExpireBehavior.NAG_ONLY)
     .build();
 ```
 
-## 六、状态说明
-
-### 6.1 查询状态
+## 查询注册状态
 
 ```java
 RegistrationManager manager = new RegistrationManager(context);
 
-// 查询当前状态
 RegistrationManager.State state = manager.getCurrentState();
-// State: LICENSED(已激活) / TRIALING(试用中) / EXPIRED(已过期) / NEED_REGISTER(需注册)
+// LICENSED(已激活) / TRIALING(试用中) / EXPIRED(已过期) / NEED_REGISTER(需注册)
 
-// 判断是否已激活
 boolean isLicensed = manager.isLicensed();
-
-// 获取试用期剩余天数
-int trialDays = manager.getTrialRemainingDays();
-
-// 获取许可证到期时间
-Long expiryMs = manager.getLicenseExpiryMs();  // 0=永久,null=无许可证
-
-// 获取许可证剩余天数
-int licenseDays = manager.getLicenseRemainingDays();  // -1=永久
+int trialRemainingDays = manager.getTrialRemainingDays();
+Long expiryMs = manager.getLicenseExpiryMs();  // 0=永久
+int licenseRemainingDays = manager.getLicenseRemainingDays();  // -1=永久
 ```
 
-### 6.2 强制校验
+## 注册机使用
 
-```java
-// 安装生命周期守卫(每次 Activity 启动时校验)
-manager.installLifecycleGuard(appContext);
+1. 安装 `keygen-app` APK
+2. 点击「选择私钥文件」，选择 `reggate_priv.pem`
+3. 输入客户机的安装码
+4. 输入购买天数（0 = 永久）
+5. 点击「生成激活码」
+6. 复制激活码发给客户机
 
-// 业务级断言(未注册/过期则终止进程)
-manager.ensureRegistered();
-```
+> **私钥路径会自动记住**，下次启动无需重新选择。
 
-## 七、剥离注册库
+## 安全模型
+
+| 要素 | 位置 | 说明 |
+|---|---|---|
+| 公钥 | 编译时内置到注册库 | 源码可公开，公钥本来就是公开的 |
+| 私钥 | 注册机从本地文件加载 | 私钥永不写入任何 APK |
+| 签名 | SHA256withRSA | 即使看到源码也无法伪造激活码 |
+| 设备绑定 | deviceId 参与签名 | 一个激活码只能在一台设备上使用 |
+| 防重放 | nonce 参与签名 | 每次启动的安装码都不同 |
+| 存储 | EncryptedSharedPreferences | 激活码用 AES-256 加密存储 |
+
+## 剥离注册库
 
 1. 移除 `build.gradle` 中的 `registration-lib` 依赖
 2. Application 改回继承 `Application`
-3. 移除 `RegGateConfig.init()` 调用
+3. 移除 `RegGateConfig.init()` 和 `installLifecycleGuard()` 调用
 4. `AndroidManifest.xml` 改回原启动 Activity
-5. 移除所有 `RegistrationManager` 相关调用
 
-## 八、注意事项
-
-### 8.1 私钥安全
-
-- 私钥必须妥善保管,不能随注册机分发
-- 注册机从本地文件选择私钥,不存储私钥内容
-- 每次使用后建议将私钥文件移出设备
-
-### 8.2 设备指纹
-
-- 使用 `Build.SERIAL + Build.MODEL` 组合作为设备指纹
-- 更换设备或恢复出厂设置后需重新激活
-
-### 8.3 试用重置
-
-- 清除 App 数据可重置试用期
-- 如需防重置,需配合服务器验证
-
-### 8.4 源码公开
-
-- **注册库源码可公开**:安全核心在于私钥,不在源码
-- **注册机源码可公开**:私钥由用户外部提供
-- **公钥写死在源码中**:公钥本来就是公开的
-
-## 九、技术栈
+## 技术栈
 
 | 组件 | 技术 |
 |---|---|
 | 加密算法 | RSA-2048 + SHA256withRSA |
 | 签名协议 | 挑战-响应(设备指纹 + 随机 nonce) |
 | 编码方式 | Crockford Base32 |
-| 密钥存储 | 私钥:本地文件;公钥:编译时硬编码 |
-| 数据存储 | EncryptedSharedPreferences(AES-256) |
 | 最小 SDK | API 21(Android 5.0) |

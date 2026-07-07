@@ -60,7 +60,7 @@ public final class RegGateConfig {
      *   - appName: "本应用"
      */
     private static final int DEFAULT_TRIAL_DAYS = 7;
-    private static final PromptTiming DEFAULT_PROMPT_TIMING = PromptTiming.FIRST_LAUNCH;
+    private static final PromptTiming DEFAULT_PROMPT_TIMING = PromptTiming.EVERY_LAUNCH;
     private static final ExpireBehavior DEFAULT_EXPIRE_BEHAVIOR = ExpireBehavior.BLOCK;
     private static final long DEFAULT_FIRST_TRIAL_DELAY_MS = 0L;
     private static final String DEFAULT_APP_NAME = "本应用";
@@ -92,12 +92,11 @@ public final class RegGateConfig {
     public static String getDefaultPublicKey(Context context) {
         if (defaultPublicKey == null) {
             try {
-                Resources res = context.getResources();
-                int id = res.getIdentifier("reggate_pub_key", "raw", "com.reggate.lib");
+                int id = context.getResources().getIdentifier("reggate_pub_key", "raw", context.getPackageName());
                 if (id == 0) {
                     throw new IOException("未找到公钥资源文件");
                 }
-                try (InputStream is = res.openRawResource(id);
+                try (InputStream is = context.getResources().openRawResource(id);
                      BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                     StringBuilder sb = new StringBuilder();
                     String line;

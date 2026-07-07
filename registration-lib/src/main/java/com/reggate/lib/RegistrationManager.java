@@ -145,6 +145,7 @@ public final class RegistrationManager {
     }
 
     private void handleTrialDialogOnFirstLaunch(android.app.Activity activity) {
+        if (isLicensed()) return;
         RegGateConfig.PromptTiming timing = getEffectivePromptTiming();
         boolean needDialog = timing == RegGateConfig.PromptTiming.FIRST_LAUNCH && !isTrialDialogShown()
                 || timing == RegGateConfig.PromptTiming.EVERY_LAUNCH;
@@ -192,26 +193,14 @@ public final class RegistrationManager {
     }
 
     public int getEffectiveTrialDays() {
-        CryptoUtils.License lic = getActiveLicense();
-        if (lic != null && !lic.isExpired()) {
-            return lic.getTrialDays();
-        }
         return config.getTrialDays();
     }
 
     public RegGateConfig.PromptTiming getEffectivePromptTiming() {
-        CryptoUtils.License lic = getActiveLicense();
-        if (lic != null && !lic.isExpired()) {
-            return lic.getPromptTiming();
-        }
         return config.getPromptTiming();
     }
 
     public RegGateConfig.ExpireBehavior getEffectiveExpireBehavior() {
-        CryptoUtils.License lic = getActiveLicense();
-        if (lic != null && !lic.isExpired()) {
-            return lic.getExpireBehavior();
-        }
         return config.getExpireBehavior();
     }
 
@@ -292,7 +281,9 @@ public final class RegistrationManager {
         if (trialDays <= 0) return 0L;
         long first = prefs.getFirstLaunchMs();
         if (first == 0L) return trialDays * DAY_MS;
-        long r = trialDays * DAY_MS - (System.currentTimeMillis() - first);
+        long now = System.currentTimeMillis();
+        if (first > now) return trialDays * DAY_MS;
+        long r = trialDays * DAY_MS - (now - first);
         return r < 0 ? 0L : r;
     }
 

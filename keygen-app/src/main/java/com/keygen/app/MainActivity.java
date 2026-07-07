@@ -4,12 +4,12 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,39 +23,33 @@ import java.io.InputStreamReader;
 import java.security.PrivateKey;
 
 /**
- * 注册机主界面(RSA-2048 + 隐写配置)。
+ * 注册机主界面(RSA-2048)。
  *
  * <b>核心特性:</b>
- *   - 私钥从本地文件选择(.pem/.der),不存储在注册机内
+ *   - 私钥从本地文件选择(.pem/.der),路径保存在 SharedPreferences
  *   - RSA-2048 + SHA256withRSA 签名
- *   - 设置隐写在激活码中(试用天数、弹框时机、到期行为),被签名保护
- *   - 输入安装码 + 购买天数 + 配置选项 → 生成激活码
+ *   - 输入安装码 + 购买天数 → 生成激活码
  *   - 导出公钥(由私钥推导)
  *
- * <b>隐写配置(flags 字节):</b>
- *   - bit 0-1: trialDays 模式 (0=3天, 1=7天, 2=14天, 3=无试用)
- *   - bit 2: promptTiming (0=FIRST_LAUNCH, 1=ON_EXPIRY)
- *   - bit 3: expireBehavior (0=BLOCK, 1=NAG_ONLY)
+ * <b>试用配置:</b>写死在注册库中,不在注册码中传递。
  *
  * <b>使用流程:</b>
- *   1. 点击"选择私钥文件" → 从设备存储选择 .pem/.der 私钥文件
- *   2. 自动导出公钥 → 复制公钥粘贴到注册库 RegGateConfig.publicKey(...)
- *   3. 设置隐写配置(试用天数、弹框时机、到期行为)
- *   4. 输入客户机安装码 + 购买天数 → 生成激活码
- *   5. 复制激活码发回给客户机
+ *   1. 点击"选择私钥文件" → 从设备存储选择 .pem/.der 私钥文件(选择一次后记住)
+ *   2. 自动导出公钥 → 复制公钥粘贴到注册库 RegGateConfig
+ *   3. 输入客户机安装码 + 购买天数 → 生成激活码
+ *   4. 复制激活码发回给客户机
  */
 public class MainActivity extends AppCompatActivity {
 
     private static final int REQ_OPEN_FILE = 0x1001;
+    private static final String PREFS_NAME = "keygen_prefs";
+    private static final String PREF_LAST_KEY_URI = "last_key_uri";
 
     private PrivateKey privateKey;
     private TextView tvPubKey;
     private TextView tvPrivStatus;
     private EditText etRequestCode;
     private EditText etValidDays;
-    private RadioGroup rgTrialDays;
-    private RadioGroup rgPrompt;
-    private RadioGroup rgExpire;
     private TextView tvActivationCode;
     private Button btnGenerate;
     private Button btnCopyActivation;
@@ -70,9 +64,7 @@ public class MainActivity extends AppCompatActivity {
         tvPrivStatus = findViewById(R.id.tv_priv_status);
         etRequestCode = findViewById(R.id.et_request_code);
         etValidDays = findViewById(R.id.et_valid_days);
-        rgTrialDays = findViewById(R.id.rg_trial_days);
-        rgPrompt = findViewById(R.id.rg_prompt);
-        rgExpire = findViewById(R.id.rg_expire);
+        etValidDays.setText("365");
         tvActivationCode = findViewById(R.id.tv_activation_code);
         btnGenerate = findViewById(R.id.btn_generate);
         btnCopyActivation = findViewById(R.id.btn_copy_activation);
@@ -111,13 +103,27 @@ public class MainActivity extends AppCompatActivity {
             toast("激活码已复制");
         });
 
+        String lastUri = getPreferences().getString(PREF_LAST_KEY_URI, null);
+        if (lastUri != null) {
+            loadPrivateKeyFromUri(Uri.parse(lastUri));
+        }
+
         updateUiState();
+    }
+
+    private SharedPreferences getPreferences() {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private void saveLastKeyUri(Uri uri) {
+        getPreferences().edit().putString(PREF_LAST_KEY_URI, uri.toString()).apply();
     }
 
     private void openPrivateKeyFile() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, REQ_OPEN_FILE);
     }
 
@@ -127,6 +133,11 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQ_OPEN_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
+                try {
+                    getContentResolver().takePersistableUriPermission(uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ignored) {}
+                saveLastKeyUri(uri);
                 loadPrivateKeyFromUri(uri);
             }
         }
@@ -188,20 +199,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        int trialDaysMode = getTrialDaysMode();
-        int promptTimingMode = getPromptTimingMode();
-        boolean nagOnlyExpire = rgExpire.getCheckedRadioButtonId() == R.id.rb_expire_nag;
-
         try {
-            String code = KeygenUtils.generateActivationCode(
-                    requestCode, validDays, trialDaysMode, promptTimingMode, nagOnlyExpire, privateKey);
+            String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
 
             String display = code + "\n\n"
                     + "购买时长: " + (validDays == 0 ? "永久" : validDays + " 天") + "\n"
-                    + "到期: " + KeygenUtils.formatExpiry(validDays) + "\n"
-                    + "试用天数: " + KeygenUtils.trialDaysLabel(trialDaysMode) + "\n"
-                    + "弹框时机: " + getPromptTimingLabel(promptTimingMode) + "\n"
-                    + "到期行为: " + (nagOnlyExpire ? "仅弹提示" : "限制功能");
+                    + "到期: " + KeygenUtils.formatExpiry(validDays);
 
             tvActivationCode.setText(display);
             btnCopyActivation.setEnabled(true);
@@ -209,31 +212,6 @@ public class MainActivity extends AppCompatActivity {
             toast("安装码格式错误");
         } catch (Exception e) {
             toast("生成失败: " + e.getMessage());
-        }
-    }
-
-    private int getTrialDaysMode() {
-        int id = rgTrialDays.getCheckedRadioButtonId();
-        if (id == R.id.rb_trial_3) return 0;
-        if (id == R.id.rb_trial_7) return 1;
-        if (id == R.id.rb_trial_14) return 2;
-        return 3;
-    }
-
-    private int getPromptTimingMode() {
-        int id = rgPrompt.getCheckedRadioButtonId();
-        if (id == R.id.rb_prompt_first) return 0;
-        if (id == R.id.rb_prompt_expiry) return 1;
-        if (id == R.id.rb_prompt_every) return 2;
-        return 0;
-    }
-
-    private String getPromptTimingLabel(int mode) {
-        switch (mode) {
-            case 0: return "首次启动";
-            case 1: return "到期后";
-            case 2: return "每次启动";
-            default: return "首次启动";
         }
     }
 
