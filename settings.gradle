@@ -1,0 +1,2 @@
+rootProject.name = 'anddex'
+include ':registration-lib', ':keygen-app', ':demo-app'

@@ -1,0 +1,101 @@
+package com.reggate.lib;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.text.TextUtils;
+import android.util.Base64;
+
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
+
+/**
+ * 加密 SharedPreferences 存储层。
+ *
+ * 存储内容:
+ *  - first_launch_ms     首次启动时间(用于试用倒计时)
+ *  - activation_code     已验证通过的激活码
+ *  - license_nonce       激活码绑定的随机挑战(8 字节 Base64)
+ *  - trial_dialog_shown  是否已弹过首次试用框
+ *
+ * 使用 EncryptedSharedPreferences(AndroidX Security)做静态加密。
+ */
+final class PrefsManager {
+
+    private static final String PREF_NAME = "reggate_secure_prefs";
+    private static final String KEY_FIRST_LAUNCH_MS = "first_launch_ms";
+    private static final String KEY_ACTIVATION_CODE = "activation_code";
+    private static final String KEY_LICENSE_NONCE = "license_nonce";
+    private static final String KEY_PENDING_NONCE = "pending_nonce";
+    private static final String KEY_TRIAL_DIALOG_SHOWN = "trial_dialog_shown";
+
+    private final SharedPreferences sp;
+
+    PrefsManager(Context ctx) {
+        Context app = ctx.getApplicationContext();
+        sp = createSecurePrefs(app);
+    }
+
+    private static SharedPreferences createSecurePrefs(Context app) {
+        try {
+            MasterKey master = new MasterKey.Builder(app)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+            return EncryptedSharedPreferences.create(
+                    app, PREF_NAME, master,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
+        } catch (Exception e) {
+            return app.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        }
+    }
+
+    long getFirstLaunchMs() { return sp.getLong(KEY_FIRST_LAUNCH_MS, 0L); }
+
+    void setFirstLaunchMsIfAbsent(long now) {
+        if (sp.getLong(KEY_FIRST_LAUNCH_MS, 0L) == 0L) {
+            sp.edit().putLong(KEY_FIRST_LAUNCH_MS, now).apply();
+        }
+    }
+
+    String getActivationCode() { return sp.getString(KEY_ACTIVATION_CODE, null); }
+
+    byte[] getLicenseNonce() {
+        String b64 = sp.getString(KEY_LICENSE_NONCE, null);
+        if (TextUtils.isEmpty(b64)) return null;
+        return Base64.decode(b64, Base64.NO_WRAP);
+    }
+
+    void saveLicense(String activationCode, byte[] nonce) {
+        sp.edit()
+                .putString(KEY_ACTIVATION_CODE, activationCode)
+                .putString(KEY_LICENSE_NONCE, Base64.encodeToString(nonce, Base64.NO_WRAP))
+                .apply();
+    }
+
+    void clearLicense() {
+        sp.edit()
+                .remove(KEY_ACTIVATION_CODE)
+                .remove(KEY_LICENSE_NONCE)
+                .apply();
+    }
+
+    boolean hasLicense() { return !TextUtils.isEmpty(getActivationCode()); }
+
+    byte[] getPendingNonce() {
+        String b64 = sp.getString(KEY_PENDING_NONCE, null);
+        if (TextUtils.isEmpty(b64)) return null;
+        return Base64.decode(b64, Base64.NO_WRAP);
+    }
+
+    void setPendingNonce(byte[] nonce) {
+        if (nonce == null) {
+            sp.edit().remove(KEY_PENDING_NONCE).apply();
+        } else {
+            sp.edit().putString(KEY_PENDING_NONCE, Base64.encodeToString(nonce, Base64.NO_WRAP)).apply();
+        }
+    }
+
+    boolean isTrialDialogShown() { return sp.getBoolean(KEY_TRIAL_DIALOG_SHOWN, false); }
+
+    void markTrialDialogShown() { sp.edit().putBoolean(KEY_TRIAL_DIALOG_SHOWN, true).apply(); }
+}

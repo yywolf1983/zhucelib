@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">注册库 Demo</string>
+    <string name="install_code_label">安装码（复制到注册机）：</string>
+    <string name="status_label">注册状态：</string>
+    <string name="activation_code_label">激活码：</string>
+    <string name="btn_verify">验证激活码</string>
+</resources>

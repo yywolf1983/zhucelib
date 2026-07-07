@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="keygen_app_name">注册机</string>
+    <string name="keygen_subtitle">RSA-2048 + SHA256withRSA · 挑战-响应激活码生成器</string>
+
+    <string name="kg_section_privkey">私钥文件(从本地选择 .pem/.der)</string>
+    <string name="kg_select_priv">选择私钥文件</string>
+
+    <string name="kg_section_pubkey">公钥(由私钥推导,粘贴到注册库)</string>
+    <string name="kg_copy_pub">复制公钥</string>
+
+    <string name="kg_section_flags">隐写配置(写入激活码,被签名保护)</string>
+    <string name="kg_flags_hint">这些设置会加密写入激活码,即使看到源码也无法篡改</string>
+
+    <string name="kg_trial_days_label">试用天数</string>
+    <string name="kg_trial_3">3天</string>
+    <string name="kg_trial_7">7天</string>
+    <string name="kg_trial_14">14天</string>
+    <string name="kg_trial_none">无试用</string>
+
+    <string name="kg_prompt_label">注册框弹出时机</string>
+    <string name="kg_prompt_first">首次启动</string>
+    <string name="kg_prompt_expiry">到期后</string>
+    <string name="kg_prompt_every">每次启动</string>
+
+    <string name="kg_expire_label">到期后行为</string>
+    <string name="kg_expire_block">限制功能</string>
+    <string name="kg_expire_nag">仅弹提示</string>
+
+    <string name="kg_section_gen">生成激活码</string>
+    <string name="kg_request_code_label">客户机安装码</string>
+    <string name="kg_request_code_hint">粘贴安装码</string>
+    <string name="kg_paste_request">粘贴安装码</string>
+    <string name="kg_valid_days_label">购买时长(天,0 = 永久)</string>
+    <string name="kg_valid_days_hint">例如 30</string>
+    <string name="kg_generate">生成激活码</string>
+    <string name="kg_activation_code_label">激活码(发回给客户机)</string>
+    <string name="kg_copy_activation">复制激活码</string>
+</resources>

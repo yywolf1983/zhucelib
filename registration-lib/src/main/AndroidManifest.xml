@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- 注册门:应用真正入口,置于宿主主界面之前 -->
+        <activity
+            android:name=".RegistrationGateActivity"
+            android:exported="true"
+            android:theme="@style/Theme.RegGate.Transparent" />
+
+        <activity
+            android:name=".RegistrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RegGate" />
+
+        <activity
+            android:name=".TrialDialogActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RegGate.Dialog" />
+
+        <activity
+            android:name=".ExpiredNagActivity"
+            android:exported="false"
+            android:theme="@style/Theme.RegGate.Dialog" />
+    </application>
+
+</manifest>

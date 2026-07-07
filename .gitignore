@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Android
+local.properties
+*.iml
+.idea/
+*.keystore
+*.jks
+
+# Built APK/AAR
+**/outputs/
+**/intermediates/
+
+# Signing configs
+**/signing/
+**/keys/*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/keygen_app_name"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#222" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/keygen_subtitle"
+            android:textSize="12sp"
+            android:textColor="#888" />
+
+        <!-- 私钥选择区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/kg_section_privkey"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <TextView
+            android:id="@+id/tv_priv_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp"
+            android:textColor="#666"
+            tools:text="未选择私钥文件" />
+
+        <Button
+            android:id="@+id/btn_select_priv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/kg_select_priv" />
+
+        <!-- 公钥区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/kg_section_pubkey"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <TextView
+            android:id="@+id/tv_pub_key"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:padding="10dp"
+            android:background="#F5F5F5"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true"
+            android:textSize="10sp"
+            android:textColor="#333"
+            tools:text="MIIBIjANBgkqhkiG9w0BAQEFAAO..." />
+
+        <Button
+            android:id="@+id/btn_copy_pub"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:layout_marginTop="4dp"
+            android:text="@string/kg_copy_pub" />
+
+        <!-- 隐写配置区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="@string/kg_section_flags"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/kg_flags_hint"
+            android:textSize="11sp"
+            android:textColor="#888" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/kg_trial_days_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <RadioGroup
+            android:id="@+id/rg_trial_days"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rb_trial_3"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_trial_3"
+                android:textSize="12sp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rb_trial_7"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_trial_7"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rb_trial_14"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_trial_14"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rb_trial_none"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_trial_none"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/kg_prompt_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <RadioGroup
+            android:id="@+id/rg_prompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rb_prompt_first"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_prompt_first"
+                android:textSize="12sp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rb_prompt_expiry"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_prompt_expiry"
+                android:textSize="12sp" />
+
+            <RadioButton
+                android:id="@+id/rb_prompt_every"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_prompt_every"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/kg_expire_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <RadioGroup
+            android:id="@+id/rg_expire"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal">
+
+            <RadioButton
+                android:id="@+id/rb_expire_block"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_expire_block"
+                android:textSize="12sp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rb_expire_nag"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/kg_expire_nag"
+                android:textSize="12sp" />
+        </RadioGroup>
+
+        <!-- 生成激活码区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/kg_section_gen"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/kg_request_code_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <EditText
+            android:id="@+id/et_request_code"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="monospace"
+            android:hint="@string/kg_request_code_hint"
+            android:inputType="textNoSuggestions|textVisiblePassword"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_paste_request"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end"
+            android:text="@string/kg_paste_request" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/kg_valid_days_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <EditText
+            android:id="@+id/et_valid_days"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:hint="@string/kg_valid_days_hint"
+            android:inputType="number"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btn_generate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:enabled="false"
+            android:text="@string/kg_generate" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/kg_activation_code_label"
+            android:textSize="13sp"
+            android:textColor="#555" />
+
+        <TextView
+            android:id="@+id/tv_activation_code"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:padding="10dp"
+            android:background="#F0F4F8"
+            android:fontFamily="monospace"
+            android:textIsSelectable="true"
+            android:textSize="10sp"
+            android:textColor="#1565C0"
+            tools:text="ABCDE-FGHIJ-KLMNO-PQRST-..." />
+
+        <Button
+            android:id="@+id/btn_copy_activation"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:enabled="false"
+            android:text="@string/kg_copy_activation" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+    </LinearLayout>
+</ScrollView>

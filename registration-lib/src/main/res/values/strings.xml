@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 激活界面 -->
+    <string name="reggate_register_title">激活 - %1$s</string>
+    <string name="reggate_request_code_label">本机安装码(发送给注册机生成激活码)</string>
+    <string name="reggate_copy_request">复制安装码</string>
+    <string name="reggate_regenerate">换一个</string>
+    <string name="reggate_activation_code_label">激活码</string>
+    <string name="reggate_activation_code_hint">在此粘贴注册机生成的激活码</string>
+    <string name="reggate_paste">粘贴</string>
+    <string name="reggate_activate">激活</string>
+    <string name="reggate_request_copied">安装码已复制</string>
+    <string name="reggate_request_regenerated">已重新生成安装码</string>
+    <string name="reggate_activate_success">激活成功</string>
+    <string name="reggate_how_to">提示:复制安装码发给注册机操作员,获取激活码后粘贴到此处并点击"激活"。Ed25519 签名 + 设备绑定。</string>
+
+    <string name="reggate_hint_trial_remaining">您当前处于试用期,剩余 %1$d 天</string>
+    <string name="reggate_hint_need_activate">请输入激活码以激活应用</string>
+    <string name="reggate_hint_trial_expired">试用期已结束,请激活后使用</string>
+    <string name="reggate_hint_license_expired">授权已到期,请重新激活</string>
+    <string name="reggate_hint_expired">已到期,请激活后使用</string>
+
+    <!-- 试用框 -->
+    <string name="reggate_trial_title">%1$s - 试用版</string>
+    <string name="reggate_trial_msg">您有 %1$d 天试用期,剩余 %2$d 天。\n如需继续使用,请激活。</string>
+    <string name="reggate_continue_trial">继续试用</string>
+    <string name="reggate_register_now">立即激活</string>
+
+    <!-- 到期提示框 -->
+    <string name="reggate_nag_title">%1$s - 已到期</string>
+    <string name="reggate_nag_trial_expired">您的试用期已结束,请激活后继续使用完整功能。</string>
+    <string name="reggate_nag_license_expired">您的授权已到期,请重新激活以继续使用。</string>
+    <string name="reggate_nag_default">已到期,请激活后使用。</string>
+    <string name="reggate_nag_continue">继续使用</string>
+    <string name="reggate_nag_activate_now">立即激活</string>
+</resources>
