@@ -1,33 +1,22 @@
 package com.reggate.demo;
 
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.reggate.lib.Base32;
 import com.reggate.lib.RegGateConfig;
 import com.reggate.lib.RegistrationManager;
 
 /**
- * Demo 主界面：展示注册状态，支持输入激活码验证。
- * 使用流程：
- *   1. 首次启动会弹出试用/注册框（由注册库控制）
- *   2. 进入主界面后可查看安装码（用于在 keygen-app 中生成激活码）
- *   3. 输入激活码并点击"验证激活码"完成注册
+ * Demo 主界面：仅展示注册状态，不包含任何注册机交互。
+ * 所有注册逻辑由注册库自动完成（试用框、激活界面等）。
  */
 public class MainActivity extends AppCompatActivity {
 
     private RegistrationManager manager;
-    private TextView tvInstallCode;
     private TextView tvStatus;
     private TextView tvLimits;
-    private EditText etActivationCode;
-    private Button btnVerify;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,13 +25,9 @@ public class MainActivity extends AppCompatActivity {
 
         manager = new RegistrationManager(this);
 
-        tvInstallCode = findViewById(R.id.tv_install_code);
         tvStatus = findViewById(R.id.tv_status);
         tvLimits = findViewById(R.id.tv_limits);
-        etActivationCode = findViewById(R.id.et_activation_code);
-        btnVerify = findViewById(R.id.btn_verify);
 
-        btnVerify.setOnClickListener(v -> doVerify());
         updateStatus();
         updateLimits();
     }
@@ -55,8 +40,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateStatus() {
-        tvInstallCode.setText(Base32.group(manager.getCurrentRequestCode()));
-
         StringBuilder sb = new StringBuilder();
         sb.append("注册状态: ");
         RegistrationManager.State state = manager.getCurrentState();
@@ -70,41 +53,15 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 sb.append("\n到期时间: 永久");
             }
-            btnVerify.setEnabled(false);
-            etActivationCode.setEnabled(false);
         } else if (state == RegistrationManager.State.TRIALING) {
             sb.append("试用中");
             sb.append("\n剩余天数: ").append(manager.getTrialRemainingDays());
-            btnVerify.setEnabled(true);
-            etActivationCode.setEnabled(true);
         } else if (state == RegistrationManager.State.EXPIRED) {
             sb.append("已过期");
-            btnVerify.setEnabled(true);
-            etActivationCode.setEnabled(true);
         } else {
             sb.append("未注册");
-            btnVerify.setEnabled(true);
-            etActivationCode.setEnabled(true);
         }
         tvStatus.setText(sb.toString());
-    }
-
-    private void doVerify() {
-        String code = Base32.ungroup(etActivationCode.getText().toString());
-        if (TextUtils.isEmpty(code)) {
-            toast("请输入激活码");
-            return;
-        }
-
-        RegistrationManager.VerifyResult result = manager.verifyActivationCode(code);
-        if (result.success) {
-            toast("激活成功!");
-            updateStatus();
-            updateLimits();
-            etActivationCode.setText("");
-        } else {
-            toast("激活失败: " + result.message);
-        }
     }
 
     private void updateLimits() {
@@ -121,8 +78,10 @@ public class MainActivity extends AppCompatActivity {
         RegGateConfig.PromptTiming timing = manager.getEffectivePromptTiming();
         if (timing == RegGateConfig.PromptTiming.FIRST_LAUNCH) {
             sb.append("首次启动");
-        } else {
+        } else if (timing == RegGateConfig.PromptTiming.ON_EXPIRY) {
             sb.append("到期后");
+        } else {
+            sb.append("每次启动");
         }
 
         sb.append("\n到期行为: ");
@@ -133,9 +92,5 @@ public class MainActivity extends AppCompatActivity {
             sb.append("仅弹提示(可继续使用)");
         }
         tvLimits.setText(sb.toString());
-    }
-
-    private void toast(String msg) {
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
     }
 }

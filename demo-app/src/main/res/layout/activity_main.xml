@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#FFFFFF"
@@ -26,27 +25,6 @@
             android:text="注册库集成验证 Demo"
             android:textSize="12sp"
             android:textColor="#888" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/install_code_label"
-            android:textStyle="bold"
-            android:textColor="#1976D2" />
-
-        <TextView
-            android:id="@+id/tv_install_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:padding="10dp"
-            android:background="#F5F5F5"
-            android:fontFamily="monospace"
-            android:textIsSelectable="true"
-            android:textSize="10sp"
-            android:textColor="#333"
-            tools:text="ABCDE-FGHIJ-KLMNO-PQRST..." />
 
         <TextView
             android:layout_width="wrap_content"
@@ -83,31 +61,6 @@
             android:background="#FFF3E0"
             android:textSize="13sp"
             android:textColor="#E65100" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/activation_code_label"
-            android:textStyle="bold"
-            android:textColor="#1976D2" />
-
-        <EditText
-            android:id="@+id/et_activation_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:fontFamily="monospace"
-            android:hint="输入激活码"
-            android:inputType="textNoSuggestions|textVisiblePassword"
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/btn_verify"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/btn_verify" />
 
         <View
             android:layout_width="match_parent"

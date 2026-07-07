@@ -1,26 +1,33 @@
 package com.reggate.lib;
 
+import android.content.Context;
+import android.content.res.Resources;
+import android.util.Log;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
 /**
  * 注册库全局配置。
  *
  * <b>设计原则:</b>
- *   - 默认配置写死在库中(试用天数、弹出时机、到期行为等)
+ *   - 默认配置写死在库中(公钥、试用天数、弹出时机、到期行为等)
  *   - 宿主可通过链式调用覆盖任意默认选项
- *   - 公钥和主界面类为必填项,无默认值
+ *   - 仅主界面类为必填项
  *   - 设置可以覆盖默认选项
  *
  * <pre>
- * // 仅设置必填项(使用默认配置)
- * RegGateConfig.init(this)
- *     .publicKey("MIIBIjANBgkqhkiG9w0BAQEFAAO...")  // 必填:编译时写死的公钥
- *     .mainActivity(MainActivity.class);              // 必填:注册通过后跳转的主界面
+ * // 最简集成(使用库内置的公钥和默认配置)
+ * RegGateConfig.init(this).mainActivity(MainActivity.class).build();
  *
  * // 覆盖部分默认配置
  * RegGateConfig.init(this)
- *     .publicKey("MIIBIjANBgkqhkiG9w0BAQEFAAO...")
  *     .mainActivity(MainActivity.class)
- *     .trialDays(7)                    // 覆盖默认:试用7天
- *     .expireBehavior(NAG_ONLY);       // 覆盖默认:到期只弹提示
+ *     .publicKey("自定义公钥")      // 可选:覆盖内置公钥
+ *     .trialDays(7)                 // 可选:试用7天
+ *     .expireBehavior(NAG_ONLY);    // 可选:到期只弹提示
  * </pre>
  */
 public final class RegGateConfig {
@@ -45,6 +52,7 @@ public final class RegGateConfig {
 
     /**
      * 默认配置(写死在库中):
+     *   - publicKey: 从 res/raw/reggate_pub_key.txt 读取
      *   - trialDays: 7 天(提供试用)
      *   - promptTiming: FIRST_LAUNCH(首次启动弹框)
      *   - expireBehavior: BLOCK(到期限制功能)
@@ -58,6 +66,7 @@ public final class RegGateConfig {
     private static final String DEFAULT_APP_NAME = "本应用";
 
     private static ConfigHolder holder;
+    private static String defaultPublicKey = null;
 
     private final String publicKeyBase64;
     private final Class<?> mainActivityClass;
@@ -77,13 +86,45 @@ public final class RegGateConfig {
         this.appName = b.appName;
     }
 
+    /**
+     * 获取默认公钥(从 res/raw/reggate_pub_key.txt 读取)。
+     */
+    public static String getDefaultPublicKey(Context context) {
+        if (defaultPublicKey == null) {
+            try {
+                Resources res = context.getResources();
+                int id = res.getIdentifier("reggate_pub_key", "raw", "com.reggate.lib");
+                if (id == 0) {
+                    throw new IOException("未找到公钥资源文件");
+                }
+                try (InputStream is = res.openRawResource(id);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line.trim());
+                    }
+                    defaultPublicKey = sb.toString();
+                }
+            } catch (Exception e) {
+                Log.w("RegGateConfig", "读取默认公钥失败: " + e.getMessage());
+                defaultPublicKey = "";
+            }
+        }
+        return defaultPublicKey;
+    }
+
+    public static Builder init(Context context) {
+        return new Builder(context);
+    }
+
     public static Builder init() {
-        return new Builder();
+        return new Builder(null);
     }
 
     public static RegGateConfig get() {
         if (holder == null)
-            throw new IllegalStateException("RegGateConfig 未初始化,请在 Application.onCreate 调用 RegGateConfig.init().publicKey(...).mainActivity(...).build()");
+            throw new IllegalStateException("RegGateConfig 未初始化,请在 Application.onCreate 调用 RegGateConfig.init(context).mainActivity(...).build()");
         return holder.config;
     }
 
@@ -108,9 +149,10 @@ public final class RegGateConfig {
      * 配置构建器。
      *
      * 默认值已写死在库中,调用对应方法可覆盖。
-     * 必填项: publicKey + mainActivity
+     * 必填项: mainActivity
      */
     public static class Builder {
+        private final Context context;
         private String publicKeyBase64;
         private Class<?> mainActivityClass;
         private int trialDays = DEFAULT_TRIAL_DAYS;
@@ -119,9 +161,13 @@ public final class RegGateConfig {
         private long firstTrialDialogDelayMs = DEFAULT_FIRST_TRIAL_DELAY_MS;
         private String appName = DEFAULT_APP_NAME;
 
+        Builder(Context context) {
+            this.context = context;
+        }
+
         /**
-         * 必填:编译时写死的 RSA 公钥(Base64)。
-         * 从注册机导出公钥后粘贴到此。
+         * 可选:自定义 RSA 公钥(Base64)。
+         * 不设置则使用库内置的公钥(res/raw/reggate_pub_key.txt)。
          */
         public Builder publicKey(String publicKeyBase64) {
             this.publicKeyBase64 = publicKeyBase64;
@@ -137,7 +183,7 @@ public final class RegGateConfig {
         }
 
         /**
-         * 试用天数。默认 3 天。
+         * 试用天数。默认 7 天。
          * 0 表示不提供试用(必须注册才能使用)。
          */
         public Builder trialDays(int days) {
@@ -147,7 +193,7 @@ public final class RegGateConfig {
 
         /**
          * 注册框弹出时机。默认 FIRST_LAUNCH(首次启动弹框)。
-         * 可选:ON_EXPIRY(到期后才弹框)。
+         * 可选:ON_EXPIRY(到期后才弹框), EVERY_LAUNCH(每次启动弹框)。
          */
         public Builder promptTiming(PromptTiming t) {
             this.promptTiming = t;
@@ -181,13 +227,23 @@ public final class RegGateConfig {
 
         /**
          * 完成配置并初始化。
-         * 必须先调用 publicKey() 和 mainActivity()。
+         * 必须先调用 mainActivity()。
+         * 如果未调用 publicKey(),将使用库内置的默认公钥。
          */
         public void build() {
-            if (publicKeyBase64 == null || publicKeyBase64.length() == 0)
-                throw new IllegalStateException("RegGateConfig: publicKey 未设置,请从注册机导出公钥并填入");
             if (mainActivityClass == null)
                 throw new IllegalStateException("RegGateConfig: mainActivity 未设置");
+
+            if (publicKeyBase64 == null || publicKeyBase64.length() == 0) {
+                if (context == null) {
+                    throw new IllegalStateException("RegGateConfig: 未设置公钥且未传入 Context,无法读取默认公钥。请使用 init(context) 或手动设置 publicKey()");
+                }
+                publicKeyBase64 = getDefaultPublicKey(context);
+                if (publicKeyBase64 == null || publicKeyBase64.length() == 0) {
+                    throw new IllegalStateException("RegGateConfig: 无法读取默认公钥(res/raw/reggate_pub_key.txt)");
+                }
+            }
+
             holder = new ConfigHolder(new RegGateConfig(this));
         }
     }

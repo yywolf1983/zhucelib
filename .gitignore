@@ -19,6 +19,7 @@ local.properties
 # Keys
 **/keys/
 !demo-app/keys/test_pub.pem
+!registration-lib/src/main/res/raw/reggate_pub_key.txt
 
 # OS
 .DS_Store
