@@ -1,5 +1,7 @@
 apply plugin: 'com.android.library'
 
+buildDir = new File(rootProject.projectDir, "build/registration-lib")
+
 android {
     namespace 'com.reggate.lib'
     compileSdk 33
@@ -26,5 +28,4 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
-    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 }

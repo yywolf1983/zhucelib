@@ -5,23 +5,9 @@ import android.content.SharedPreferences;
 import android.text.TextUtils;
 import android.util.Base64;
 
-import androidx.security.crypto.EncryptedSharedPreferences;
-import androidx.security.crypto.MasterKey;
-
-/**
- * 加密 SharedPreferences 存储层。
- *
- * 存储内容:
- *  - first_launch_ms     首次启动时间(用于试用倒计时)
- *  - activation_code     已验证通过的激活码
- *  - license_nonce       激活码绑定的随机挑战(8 字节 Base64)
- *  - trial_dialog_shown  是否已弹过首次试用框
- *
- * 使用 EncryptedSharedPreferences(AndroidX Security)做静态加密。
- */
 final class PrefsManager {
 
-    private static final String PREF_NAME = "reggate_secure_prefs";
+    private static final String PREF_NAME = "reggate_prefs";
     private static final String KEY_FIRST_LAUNCH_MS = "first_launch_ms";
     private static final String KEY_ACTIVATION_CODE = "activation_code";
     private static final String KEY_LICENSE_NONCE = "license_nonce";
@@ -32,21 +18,7 @@ final class PrefsManager {
 
     PrefsManager(Context ctx) {
         Context app = ctx.getApplicationContext();
-        sp = createSecurePrefs(app);
-    }
-
-    private static SharedPreferences createSecurePrefs(Context app) {
-        try {
-            MasterKey master = new MasterKey.Builder(app)
-                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                    .build();
-            return EncryptedSharedPreferences.create(
-                    app, PREF_NAME, master,
-                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM);
-        } catch (Exception e) {
-            return app.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        }
+        sp = app.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
 
     long getFirstLaunchMs() { return sp.getLong(KEY_FIRST_LAUNCH_MS, 0L); }
