@@ -96,27 +96,10 @@ public final class RegistrationManager {
      * 未注册时自动弹出试用框/注册框,而不是直接杀进程。
      */
     public void installLifecycleGuard(android.app.Application appContext) {
-        appContext.registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
-            @Override
-            public void onActivityCreated(android.app.Activity a, android.os.Bundle b) {}
-            @Override
-            public void onActivityStarted(android.app.Activity a) {
-                enforceRegistration(a);
-            }
-            @Override
-            public void onActivityResumed(android.app.Activity a) {}
-            @Override
-            public void onActivityPaused(android.app.Activity a) {}
-            @Override
-            public void onActivityStopped(android.app.Activity a) {}
-            @Override
-            public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) {}
-            @Override
-            public void onActivityDestroyed(android.app.Activity a) {}
-        });
+        appContext.registerActivityLifecycleCallbacks(new RegGateActivityCallbacks(this));
     }
 
-    private void enforceRegistration(android.app.Activity activity) {
+    void enforceRegistration(android.app.Activity activity) {
         Class<?> cls = activity.getClass();
         if (cls == RegistrationGateActivity.class
                 || cls == RegistrationActivity.class

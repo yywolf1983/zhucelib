@@ -1,5 +1,6 @@
 package com.reggate.lib;
 
+import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
@@ -13,18 +14,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
-
-/**
- * 激活界面:展示本机安装码 + 输入激活码。
- *
- * 流程:
- *   1. 显示安装码(每次随机,客户机生成)-> 复制发给注册机操作员
- *   2. 操作员在注册机输入安装码 + 购买天数 -> 生成激活码
- *   3. 用户粘贴激活码 -> "激活" 校验(Ed25519 验签 + 设备绑定 + 随机挑战绑定)
- */
-public class RegistrationActivity extends AppCompatActivity {
+public class RegistrationActivity extends Activity {
 
     public static final String EXTRA_APP_NAME = "extra_app_name";
     public static final String EXTRA_EXPIRED = "extra_expired";
@@ -40,9 +30,14 @@ public class RegistrationActivity extends AppCompatActivity {
     private Button btnPaste;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.reggate_activity_registration);
+        int layoutId = RegGateResources.getLayoutId(this, "reggate_activity_registration");
+        if (layoutId == 0) {
+            finish();
+            return;
+        }
+        setContentView(layoutId);
 
         manager = new RegistrationManager(this);
 
@@ -51,46 +46,44 @@ public class RegistrationActivity extends AppCompatActivity {
         int trialRemaining = getIntent().getIntExtra(EXTRA_TRIAL_REMAINING_DAYS, 0);
         int licenseRemaining = getIntent().getIntExtra(EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
 
-        TextView tvTitle = findViewById(R.id.reggate_tv_title);
-        tvRequestCode = findViewById(R.id.reggate_tv_request_code);
-        tvHint = findViewById(R.id.reggate_tv_hint);
-        etActivationCode = findViewById(R.id.reggate_et_activation_code);
-        btnActivate = findViewById(R.id.reggate_btn_activate);
-        btnPaste = findViewById(R.id.reggate_btn_paste);
-        Button btnCopyCode = findViewById(R.id.reggate_btn_copy_code);
-        Button btnRegenerate = findViewById(R.id.reggate_btn_regenerate);
+        TextView tvTitle = findViewById(RegGateResources.getId(this, "reggate_tv_title"));
+        tvRequestCode = findViewById(RegGateResources.getId(this, "reggate_tv_request_code"));
+        tvHint = findViewById(RegGateResources.getId(this, "reggate_tv_hint"));
+        etActivationCode = findViewById(RegGateResources.getId(this, "reggate_et_activation_code"));
+        btnActivate = findViewById(RegGateResources.getId(this, "reggate_btn_activate"));
+        btnPaste = findViewById(RegGateResources.getId(this, "reggate_btn_paste"));
+        Button btnCopyCode = findViewById(RegGateResources.getId(this, "reggate_btn_copy_code"));
+        Button btnRegenerate = findViewById(RegGateResources.getId(this, "reggate_btn_regenerate"));
 
-        tvTitle.setText(getString(R.string.reggate_register_title, appName == null ? "" : appName));
+        tvTitle.setText(RegGateResources.getString(this, "reggate_register_title", appName == null ? "" : appName));
 
-        // 安装码
         showRequestCode();
 
-        // 状态提示
         if (expired) {
             if (manager.getConfig().getTrialDays() > 0 && trialRemaining == 0
                     && (licenseRemaining == Integer.MIN_VALUE || licenseRemaining == 0)) {
-                tvHint.setText(R.string.reggate_hint_trial_expired);
+                tvHint.setText(RegGateResources.getString(this, "reggate_hint_trial_expired"));
             } else if (licenseRemaining == 0) {
-                tvHint.setText(R.string.reggate_hint_license_expired);
+                tvHint.setText(RegGateResources.getString(this, "reggate_hint_license_expired"));
             } else {
-                tvHint.setText(R.string.reggate_hint_expired);
+                tvHint.setText(RegGateResources.getString(this, "reggate_hint_expired"));
             }
         } else if (trialRemaining > 0) {
-            tvHint.setText(getString(R.string.reggate_hint_trial_remaining, trialRemaining));
+            tvHint.setText(RegGateResources.getString(this, "reggate_hint_trial_remaining", trialRemaining));
         } else {
-            tvHint.setText(R.string.reggate_hint_need_activate);
+            tvHint.setText(RegGateResources.getString(this, "reggate_hint_need_activate"));
         }
 
         btnCopyCode.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             cm.setPrimaryClip(ClipData.newPlainText("request_code",
                     Base32.ungroup(tvRequestCode.getText().toString())));
-            Toast.makeText(this, R.string.reggate_request_copied, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_request_copied"), Toast.LENGTH_SHORT).show();
         });
 
         btnRegenerate.setOnClickListener(v -> {
             tvRequestCode.setText(Base32.group(manager.regenerateRequestCode(), 4));
-            Toast.makeText(this, R.string.reggate_request_regenerated, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_request_regenerated"), Toast.LENGTH_SHORT).show();
         });
 
         btnPaste.setOnClickListener(v -> {
@@ -112,7 +105,7 @@ public class RegistrationActivity extends AppCompatActivity {
             }
         });
 
-        if (getSupportActionBar() != null) getSupportActionBar().hide();
+        if (getActionBar() != null) getActionBar().hide();
     }
 
     private void showRequestCode() {
@@ -129,7 +122,7 @@ public class RegistrationActivity extends AppCompatActivity {
         RegistrationManager.VerifyResult result = manager.verifyActivationCode(code);
 
         if (result.success) {
-            Toast.makeText(this, R.string.reggate_activate_success, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_activate_success"), Toast.LENGTH_SHORT).show();
             setResult(RESULT_OK);
             finish();
         } else {
@@ -145,7 +138,6 @@ public class RegistrationActivity extends AppCompatActivity {
             setResult(RESULT_CANCELED);
             finish();
         } else {
-            // 未激活且不可进入:退出整个 App
             finishAffinity();
         }
     }
