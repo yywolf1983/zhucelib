@@ -51,6 +51,8 @@ public class MainActivity extends AppCompatActivity {
     private EditText etRequestCode;
     private EditText etValidDays;
     private TextView tvActivationCode;
+    private TextView tvValidDaysResult;
+    private TextView tvExpiryResult;
     private Button btnGenerate;
     private Button btnCopyActivation;
     private Button btnCopyPub;
@@ -66,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
         etValidDays = findViewById(R.id.et_valid_days);
         etValidDays.setText("365");
         tvActivationCode = findViewById(R.id.tv_activation_code);
+        tvValidDaysResult = findViewById(R.id.tv_valid_days_result);
+        tvExpiryResult = findViewById(R.id.tv_expiry_result);
         btnGenerate = findViewById(R.id.btn_generate);
         btnCopyActivation = findViewById(R.id.btn_copy_activation);
 
@@ -97,8 +101,6 @@ public class MainActivity extends AppCompatActivity {
         btnCopyActivation.setOnClickListener(v -> {
             String code = Base32.ungroup(tvActivationCode.getText().toString());
             if (TextUtils.isEmpty(code)) return;
-            int idx = code.indexOf('\n');
-            if (idx > 0) code = code.substring(0, idx);
             copyToClipboard("activation_code", code);
             toast("激活码已复制");
         });
@@ -165,6 +167,8 @@ public class MainActivity extends AppCompatActivity {
             tvPubKey.setText(pubB64);
             tvPrivStatus.setText("私钥已加载: " + uri.getLastPathSegment());
             tvActivationCode.setText("");
+            tvValidDaysResult.setText("");
+            tvExpiryResult.setText("");
             btnCopyActivation.setEnabled(false);
             toast("私钥加载成功");
 
@@ -202,11 +206,9 @@ public class MainActivity extends AppCompatActivity {
         try {
             String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
 
-            String display = code + "\n\n"
-                    + "购买时长: " + (validDays == 0 ? "永久" : validDays + " 天") + "\n"
-                    + "到期: " + KeygenUtils.formatExpiry(validDays);
-
-            tvActivationCode.setText(display);
+            tvActivationCode.setText(code);
+            tvValidDaysResult.setText("购买时长: " + (validDays == 0 ? "永久" : validDays + " 天"));
+            tvExpiryResult.setText("到期: " + KeygenUtils.formatExpiry(validDays));
             btnCopyActivation.setEnabled(true);
         } catch (IllegalArgumentException e) {
             toast("安装码格式错误");
@@ -219,7 +221,9 @@ public class MainActivity extends AppCompatActivity {
         boolean hasKey = privateKey != null;
         btnGenerate.setEnabled(hasKey);
         btnCopyPub.setEnabled(hasKey);
-        tvPrivStatus.setText(hasKey ? "私钥已加载" : "未选择私钥文件");
+        if (!hasKey) {
+            tvPrivStatus.setText("未选择私钥文件");
+        }
     }
 
     private void copyToClipboard(String label, String text) {

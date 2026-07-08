@@ -106,7 +106,9 @@ final class KeygenUtils {
     static String formatExpiry(int validDays) {
         if (validDays <= 0) return "永久";
         long exp = calcExpiryMs(validDays);
-        return new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                .format(new java.util.Date(exp));
+        return java.time.LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(exp),
+                java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
     }
 }
