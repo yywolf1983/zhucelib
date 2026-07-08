@@ -42,9 +42,8 @@
     <string name="reggate_contact_shop_label">网店: %1$s</string>
     <string name="reggate_copy">复制</string>
     <string name="reggate_copy_success">已复制</string>
+    <string name="reggate_save_qr">保存二维码</string>
+    <string name="reggate_save_qr_success">二维码已保存到相册</string>
+    <string name="reggate_save_qr_failed">保存失败,请重试</string>
 
-    <!-- 默认联系方式(写死在库中) -->
-    <string name="reggate_default_contact_phone">13800138000</string>
-    <string name="reggate_default_contact_email">support@example.com</string>
-    <string name="reggate_default_contact_website">https://example.com</string>
 </resources>

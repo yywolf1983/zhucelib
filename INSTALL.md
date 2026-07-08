@@ -124,7 +124,7 @@ RegGateConfig.init(this)
         "phone": "13800138000",
         "email": "support@example.com",
         "website": "https://example.com",
-        "shop_url": "",
+        "shop_url": "https://shop.nones.top",
         "qr_code_res_name": "reggate_qr_code",
         "custom_text": "工作日 9:00-18:00"
     }

@@ -263,12 +263,25 @@
 
             <ImageView
                 android:id="@+id/reggate_iv_qr_code"
-                android:layout_width="120dp"
-                android:layout_height="120dp"
+                android:layout_width="200dp"
+                android:layout_height="200dp"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginTop="8dp"
                 android:visibility="gone"
                 android:contentDescription="@null" />
+
+            <Button
+                android:id="@+id/reggate_btn_save_qr"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="4dp"
+                android:minWidth="0dp"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:textSize="12sp"
+                android:visibility="gone"
+                android:text="@string/reggate_save_qr" />
 
         </LinearLayout>
 

@@ -3,10 +3,19 @@ package com.reggate.lib;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -17,6 +26,10 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 public class RegistrationActivity extends Activity {
 
@@ -45,6 +58,9 @@ public class RegistrationActivity extends Activity {
     private TextView tvContactWebsiteCopy;
     private TextView tvContactShopCopy;
     private ImageView ivQrCode;
+    private Button btnSaveQr;
+
+    private int currentQrCodeResId = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,6 +99,7 @@ public class RegistrationActivity extends Activity {
         tvContactWebsiteCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_website_copy"));
         tvContactShopCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_shop_copy"));
         ivQrCode = findViewById(RegGateResources.getId(this, "reggate_iv_qr_code"));
+        btnSaveQr = findViewById(RegGateResources.getId(this, "reggate_btn_save_qr"));
 
         tvTitle.setText(RegGateResources.getString(this, "reggate_register_title", appName == null ? "" : appName));
 
@@ -175,15 +192,12 @@ public class RegistrationActivity extends Activity {
     private void setupContactInfo() {
         ContactInfo configInfo = manager.getConfig().getContactInfo();
 
-        String phone = getStringValue(configInfo != null ? configInfo.getPhone() : null, "reggate_default_contact_phone");
-        String email = getStringValue(configInfo != null ? configInfo.getEmail() : null, "reggate_default_contact_email");
-        String website = getStringValue(configInfo != null ? configInfo.getWebsite() : null, "reggate_default_contact_website");
+        String phone = configInfo != null ? configInfo.getPhone() : null;
+        String email = configInfo != null ? configInfo.getEmail() : null;
+        String website = configInfo != null ? configInfo.getWebsite() : null;
         String shopUrl = configInfo != null ? configInfo.getShopUrl() : null;
         String customText = configInfo != null ? configInfo.getCustomText() : null;
         int qrCodeResId = configInfo != null ? configInfo.getQrCodeResId() : 0;
-        if (qrCodeResId == 0) {
-            qrCodeResId = RegGateResources.getDrawableId(this, "reggate_qr_code");
-        }
 
         boolean hasContact = !TextUtils.isEmpty(phone) || !TextUtils.isEmpty(email) || 
                              !TextUtils.isEmpty(website) || !TextUtils.isEmpty(shopUrl) ||
@@ -245,22 +259,15 @@ public class RegistrationActivity extends Activity {
         }
 
         if (qrCodeResId != 0) {
+            currentQrCodeResId = qrCodeResId;
             ivQrCode.setVisibility(View.VISIBLE);
             ivQrCode.setImageResource(qrCodeResId);
+            btnSaveQr.setVisibility(View.VISIBLE);
+            btnSaveQr.setOnClickListener(v -> saveQrCodeToGallery());
         } else {
             ivQrCode.setVisibility(View.GONE);
+            btnSaveQr.setVisibility(View.GONE);
         }
-    }
-
-    private String getStringValue(String configValue, String defaultResName) {
-        if (!TextUtils.isEmpty(configValue)) {
-            return configValue;
-        }
-        int resId = RegGateResources.getStringId(this, defaultResName);
-        if (resId != 0) {
-            return getString(resId);
-        }
-        return null;
     }
 
     private void dialPhone(String phone) {
@@ -286,5 +293,83 @@ public class RegistrationActivity extends Activity {
         android.content.ClipData clip = android.content.ClipData.newPlainText("contact", text);
         clipboard.setPrimaryClip(clip);
         Toast.makeText(this, RegGateResources.getString(this, "reggate_copy_success"), Toast.LENGTH_SHORT).show();
+    }
+
+    private void saveQrCodeToGallery() {
+        if (currentQrCodeResId == 0) return;
+
+        Drawable drawable = ivQrCode.getDrawable();
+        if (!(drawable instanceof BitmapDrawable)) {
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveQrCodeViaMediaStore(bitmap);
+        } else {
+            if (checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE") != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"}, 100);
+            } else {
+                saveQrCodeLegacy(bitmap);
+            }
+        }
+    }
+
+    private void saveQrCodeViaMediaStore(Bitmap bitmap) {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "reggate_qr_" + System.currentTimeMillis() + ".png");
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+
+            ContentResolver resolver = getContentResolver();
+            Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+                return;
+            }
+            try (OutputStream os = resolver.openOutputStream(uri)) {
+                if (os != null && bitmap.compress(Bitmap.CompressFormat.PNG, 100, os)) {
+                    Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_success"), Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+                }
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void saveQrCodeLegacy(Bitmap bitmap) {
+        try {
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, "reggate_qr_" + System.currentTimeMillis() + ".png");
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                if (bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                    sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));
+                    Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_success"), Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+                }
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 100) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (currentQrCodeResId != 0 && ivQrCode.getDrawable() instanceof BitmapDrawable) {
+                    saveQrCodeLegacy(((BitmapDrawable) ivQrCode.getDrawable()).getBitmap());
+                }
+            } else {
+                Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 }
