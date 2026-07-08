@@ -16,10 +16,9 @@ import java.security.PublicKey;
  *   3. GateActivity 入口:置于主界面之前
  *   4. 每次启动重新验签(不从缓存信任),防止篡改
  *
- * <b>隐写配置:</b>
- *   激活码中包含 flags 字节,存储试用天数、弹框时机、到期行为等配置。
- *   这些配置被 RSA 签名保护,即使看到源码也无法篡改。
- *   未激活时使用默认配置,激活后使用激活码中的配置。
+ * <b>配置管理:</b>
+ *   试用配置(天数、弹框时机、到期行为)写死在注册库中,不在注册码中传递。
+ *   宿主可通过 {@link RegGateConfig} 覆盖默认配置。
  *
  * 状态机: LICENSED / TRIALING / EXPIRED / NEED_REGISTER
  */
@@ -82,11 +81,12 @@ public final class RegistrationManager {
     }
 
     /**
-     * 业务级断言:未注册则终止进程。宿主应在关键业务方法前调用。
+     * 业务级断言:未注册且不是可进入状态则终止进程。宿主应在关键业务方法前调用。
+     * 注意:NAG_ONLY 模式下到期后仍可进入,此方法不会杀进程。
      */
     public void ensureRegistered() {
-        if (!isLicensedOrTrialing()) {
-            Log.w(TAG, "未注册或试用期已过,强制终止");
+        if (!canEnterMain()) {
+            Log.w(TAG, "未注册且不可进入,强制终止");
             android.os.Process.killProcess(android.os.Process.myPid());
         }
     }
@@ -287,7 +287,7 @@ public final class RegistrationManager {
 
     public int getLicenseRemainingDays() {
         Long exp = getLicenseExpiryMs();
-        if (exp == null) return Integer.MIN_VALUE;
+        if (exp == null) return 0;
         if (exp == 0L) return -1;
         long r = exp - System.currentTimeMillis();
         return r <= 0 ? 0 : (int) Math.ceil(r / (double) DAY_MS);

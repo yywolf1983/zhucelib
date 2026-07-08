@@ -56,10 +56,6 @@ public class RegistrationGateActivity extends Activity {
             return;
         }
 
-        if (timing == RegGateConfig.PromptTiming.FIRST_LAUNCH) {
-            manager.markTrialDialogShown();
-        }
-
         final long delayMs = manager.getConfig().getFirstTrialDialogDelayMs();
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (isFinishing()) return;
