@@ -24,6 +24,8 @@ local.properties
 # OS
 .DS_Store
 Thumbs.db
+build_all.conf
+build_all.sh
 
 # Logs
 *.log

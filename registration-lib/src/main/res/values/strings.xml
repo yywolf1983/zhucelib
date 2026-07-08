@@ -16,7 +16,7 @@
 
     <string name="reggate_hint_trial_remaining">您当前处于试用期,剩余 %1$d 天</string>
     <string name="reggate_hint_need_activate">请输入激活码以激活应用</string>
-    <string name="reggate_hint_trial_expired">试用期已结束,请激活后使用</string>
+    <string name="reggate_hint_trial_expired">应用已到期,请激活后使用</string>
     <string name="reggate_hint_license_expired">授权已到期,请重新激活</string>
     <string name="reggate_hint_expired">已到期,请激活后使用</string>
 
@@ -28,7 +28,7 @@
 
     <!-- 到期提示框 -->
     <string name="reggate_nag_title">%1$s - 已到期</string>
-    <string name="reggate_nag_trial_expired">您的试用期已结束,请激活后继续使用完整功能。</string>
+    <string name="reggate_nag_trial_expired">您的应用已到期,请激活后继续使用完整功能。</string>
     <string name="reggate_nag_license_expired">您的授权已到期,请重新激活以继续使用。</string>
     <string name="reggate_nag_default">已到期,请激活后使用。</string>
     <string name="reggate_nag_continue">继续使用</string>
