@@ -5,12 +5,16 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,6 +32,19 @@ public class RegistrationActivity extends Activity {
     private EditText etActivationCode;
     private Button btnActivate;
     private Button btnPaste;
+    private Button btnRegenerate;
+
+    private LinearLayout contactContainer;
+    private TextView tvContactPhone;
+    private TextView tvContactEmail;
+    private TextView tvContactWebsite;
+    private TextView tvContactShop;
+    private TextView tvContactCustom;
+    private TextView tvContactPhoneCopy;
+    private TextView tvContactEmailCopy;
+    private TextView tvContactWebsiteCopy;
+    private TextView tvContactShopCopy;
+    private ImageView ivQrCode;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,11 +70,24 @@ public class RegistrationActivity extends Activity {
         btnActivate = findViewById(RegGateResources.getId(this, "reggate_btn_activate"));
         btnPaste = findViewById(RegGateResources.getId(this, "reggate_btn_paste"));
         Button btnCopyCode = findViewById(RegGateResources.getId(this, "reggate_btn_copy_code"));
-        Button btnRegenerate = findViewById(RegGateResources.getId(this, "reggate_btn_regenerate"));
+        btnRegenerate = findViewById(RegGateResources.getId(this, "reggate_btn_regenerate"));
+
+        contactContainer = findViewById(RegGateResources.getId(this, "reggate_contact_container"));
+        tvContactPhone = findViewById(RegGateResources.getId(this, "reggate_tv_contact_phone"));
+        tvContactEmail = findViewById(RegGateResources.getId(this, "reggate_tv_contact_email"));
+        tvContactWebsite = findViewById(RegGateResources.getId(this, "reggate_tv_contact_website"));
+        tvContactShop = findViewById(RegGateResources.getId(this, "reggate_tv_contact_shop"));
+        tvContactCustom = findViewById(RegGateResources.getId(this, "reggate_tv_contact_custom"));
+        tvContactPhoneCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_phone_copy"));
+        tvContactEmailCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_email_copy"));
+        tvContactWebsiteCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_website_copy"));
+        tvContactShopCopy = findViewById(RegGateResources.getId(this, "reggate_tv_contact_shop_copy"));
+        ivQrCode = findViewById(RegGateResources.getId(this, "reggate_iv_qr_code"));
 
         tvTitle.setText(RegGateResources.getString(this, "reggate_register_title", appName == null ? "" : appName));
 
         showRequestCode();
+        setupContactInfo();
 
         if (expired) {
             if (manager.getConfig().getTrialDays() > 0 && trialRemaining == 0
@@ -140,5 +170,121 @@ public class RegistrationActivity extends Activity {
         } else {
             finishAffinity();
         }
+    }
+
+    private void setupContactInfo() {
+        ContactInfo configInfo = manager.getConfig().getContactInfo();
+
+        String phone = getStringValue(configInfo != null ? configInfo.getPhone() : null, "reggate_default_contact_phone");
+        String email = getStringValue(configInfo != null ? configInfo.getEmail() : null, "reggate_default_contact_email");
+        String website = getStringValue(configInfo != null ? configInfo.getWebsite() : null, "reggate_default_contact_website");
+        String shopUrl = configInfo != null ? configInfo.getShopUrl() : null;
+        String customText = configInfo != null ? configInfo.getCustomText() : null;
+        int qrCodeResId = configInfo != null ? configInfo.getQrCodeResId() : 0;
+        if (qrCodeResId == 0) {
+            qrCodeResId = RegGateResources.getDrawableId(this, "reggate_qr_code");
+        }
+
+        boolean hasContact = !TextUtils.isEmpty(phone) || !TextUtils.isEmpty(email) || 
+                             !TextUtils.isEmpty(website) || !TextUtils.isEmpty(shopUrl) ||
+                             !TextUtils.isEmpty(customText) || qrCodeResId != 0;
+
+        if (hasContact) {
+            contactContainer.setVisibility(View.VISIBLE);
+        } else {
+            contactContainer.setVisibility(View.GONE);
+            return;
+        }
+
+        View phoneLayout = findViewById(RegGateResources.getId(this, "reggate_contact_phone_layout"));
+        View emailLayout = findViewById(RegGateResources.getId(this, "reggate_contact_email_layout"));
+        View websiteLayout = findViewById(RegGateResources.getId(this, "reggate_contact_website_layout"));
+        View shopLayout = findViewById(RegGateResources.getId(this, "reggate_contact_shop_layout"));
+
+        if (!TextUtils.isEmpty(phone)) {
+            phoneLayout.setVisibility(View.VISIBLE);
+            tvContactPhone.setText(RegGateResources.getString(this, "reggate_contact_phone_label", phone));
+            tvContactPhone.setOnClickListener(v -> dialPhone(phone));
+            tvContactPhoneCopy.setOnClickListener(v -> copyToClipboard(phone));
+        } else {
+            phoneLayout.setVisibility(View.GONE);
+        }
+
+        if (!TextUtils.isEmpty(email)) {
+            emailLayout.setVisibility(View.VISIBLE);
+            tvContactEmail.setText(RegGateResources.getString(this, "reggate_contact_email_label", email));
+            tvContactEmail.setOnClickListener(v -> sendEmail(email));
+            tvContactEmailCopy.setOnClickListener(v -> copyToClipboard(email));
+        } else {
+            emailLayout.setVisibility(View.GONE);
+        }
+
+        if (!TextUtils.isEmpty(website)) {
+            websiteLayout.setVisibility(View.VISIBLE);
+            tvContactWebsite.setText(RegGateResources.getString(this, "reggate_contact_website_label", website));
+            tvContactWebsite.setOnClickListener(v -> openWebsite(website));
+            tvContactWebsiteCopy.setOnClickListener(v -> copyToClipboard(website));
+        } else {
+            websiteLayout.setVisibility(View.GONE);
+        }
+
+        if (!TextUtils.isEmpty(shopUrl)) {
+            shopLayout.setVisibility(View.VISIBLE);
+            tvContactShop.setText(RegGateResources.getString(this, "reggate_contact_shop_label", shopUrl));
+            tvContactShop.setOnClickListener(v -> openWebsite(shopUrl));
+            tvContactShopCopy.setOnClickListener(v -> copyToClipboard(shopUrl));
+        } else {
+            shopLayout.setVisibility(View.GONE);
+        }
+
+        if (!TextUtils.isEmpty(customText)) {
+            tvContactCustom.setText(customText);
+            tvContactCustom.setVisibility(View.VISIBLE);
+        } else {
+            tvContactCustom.setVisibility(View.GONE);
+        }
+
+        if (qrCodeResId != 0) {
+            ivQrCode.setVisibility(View.VISIBLE);
+            ivQrCode.setImageResource(qrCodeResId);
+        } else {
+            ivQrCode.setVisibility(View.GONE);
+        }
+    }
+
+    private String getStringValue(String configValue, String defaultResName) {
+        if (!TextUtils.isEmpty(configValue)) {
+            return configValue;
+        }
+        int resId = RegGateResources.getStringId(this, defaultResName);
+        if (resId != 0) {
+            return getString(resId);
+        }
+        return null;
+    }
+
+    private void dialPhone(String phone) {
+        Intent intent = new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + phone));
+        startActivity(intent);
+    }
+
+    private void sendEmail(String email) {
+        Intent intent = new Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + email));
+        startActivity(intent);
+    }
+
+    private void openWebsite(String website) {
+        if (!website.startsWith("http://") && !website.startsWith("https://")) {
+            website = "https://" + website;
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(website));
+        startActivity(intent);
+    }
+
+    private void copyToClipboard(String text) {
+        android.content.ClipboardManager clipboard = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        android.content.ClipData clip = android.content.ClipData.newPlainText("contact", text);
+        clipboard.setPrimaryClip(clip);
+        Toast.makeText(this, RegGateResources.getString(this, "reggate_copy_success"), Toast.LENGTH_SHORT).show();
     }
 }

@@ -28,6 +28,14 @@ public final class RegGateResources {
         return ctx.getResources().getIdentifier(name, "raw", ctx.getPackageName());
     }
 
+    public static int getDrawableId(Context ctx, String name) {
+        int id = ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
+        if (id == 0) {
+            id = ctx.getResources().getIdentifier(name, "drawable", PACKAGE_NAME);
+        }
+        return id;
+    }
+
     public static String getString(Context ctx, String name, Object... args) {
         int id = getStringId(ctx, name);
         if (id == 0) return name;

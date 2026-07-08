@@ -36,12 +36,13 @@ GRADLE_MIRRORS=(
 JAVA_MIN=11
 JAVA_MAX=21
 
-# 模块定义: name|task_prefix|output_subpath
+# 模块定义: name|task_prefix|output_subpath|is_lib(是否特殊输出路径)
 #   output_subpath 中 {TYPE} 会被替换为 debug/release
+#   registration-lib 的构建目录被重定向到 build/registration-lib/
 MODULES=(
-    "registration-lib|registration-lib|build/outputs/aar/registration-lib-{TYPE}.aar"
-    "keygen-app|keygen-app|build/outputs/apk/{TYPE}/keygen-app-{TYPE}.apk"
-    "demo-app|demo-app|build/outputs/apk/{TYPE}/demo-app-{TYPE}.apk"
+    "registration-lib|registration-lib|build/registration-lib/outputs/aar/registration-lib-{TYPE}.aar|lib"
+    "keygen-app|keygen-app|build/outputs/apk/{TYPE}/keygen-app-{TYPE}.apk|"
+    "demo-app|demo-app|build/outputs/apk/{TYPE}/demo-app-{TYPE}.apk|"
 )
 
 # 全局状态
@@ -297,13 +298,15 @@ check_env() {
 # -----------------------------------------------------------------------------
 
 # 构建单个模块
-#   $1 = 模块定义(name|task_prefix|output_subpath)
+#   $1 = 模块定义(name|task_prefix|output_subpath|is_lib)
 build_module() {
     local def="$1"
     local name="${def%%|*}"
     local rest="${def#*|}"
     local task_prefix="${rest%%|*}"
-    local out_pattern="${rest#*|}"
+    local rest2="${rest#*|}"
+    local out_pattern="${rest2%%|*}"
+    local is_lib="${rest2#*|}"
 
     local cap_type
     case "$BUILD_TYPE" in
@@ -311,11 +314,14 @@ build_module() {
         debug)   cap_type="Debug"   ;;
     esac
     local task=":${task_prefix}:assemble${cap_type}"
-    local output="${out_pattern//\{TYPE\}/$BUILD_TYPE}"
-    output="${name}/${output}"
+    if [ "$is_lib" = "lib" ]; then
+        output="${out_pattern//\{TYPE\}/$BUILD_TYPE}"
+    else
+        output="${name}/${out_pattern//\{TYPE\}/$BUILD_TYPE}"
+    fi
 
     echo -e "${YELLOW}构建 $name - $BUILD_TYPE${NC}"
-    $GRADLE_CMD "$task"
+    $GRADLE_CMD --no-build-cache "$task"
 
     if [ -f "$output" ]; then
         echo -e "${GREEN}$name 构建成功: $output${NC}"
@@ -332,18 +338,25 @@ build_all() {
     echo ""
 
     if [ "$BUILD_TYPE" = "release" ]; then
-        $GRADLE_CMD assembleRelease
+        $GRADLE_CMD --no-build-cache assembleRelease
     else
-        $GRADLE_CMD assembleDebug
+        $GRADLE_CMD --no-build-cache assembleDebug
     fi
 
     echo ""
     echo -e "${GREEN}=== 构建产物 ===${NC}"
-    local def name out_pattern output
+    local def name rest rest2 out_pattern is_lib output
     for def in "${MODULES[@]}"; do
         name="${def%%|*}"
-        out_pattern="${def##*|}"
-        output="${name}/${out_pattern//\{TYPE\}/$BUILD_TYPE}"
+        rest="${def#*|}"
+        rest2="${rest#*|}"
+        out_pattern="${rest2%%|*}"
+        is_lib="${rest2#*|}"
+        if [ "$is_lib" = "lib" ]; then
+            output="${out_pattern//\{TYPE\}/$BUILD_TYPE}"
+        else
+            output="${name}/${out_pattern//\{TYPE\}/$BUILD_TYPE}"
+        fi
         if [ -f "$output" ]; then
             echo "  $name: $output"
             ls -lh "$output" | awk '{print "    大小: " $5}'

@@ -42,7 +42,6 @@
             tools:ignore="HardcodedText"
             tools:text="试用剩余 7 天" />
 
-        <!-- 安装码 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -88,7 +87,6 @@
                 android:text="@string/reggate_regenerate" />
         </LinearLayout>
 
-        <!-- 激活码 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -138,6 +136,141 @@
             android:textSize="11sp"
             android:textColor="#AAAAAA"
             android:text="@string/reggate_how_to" />
+
+        <LinearLayout
+            android:id="@+id/reggate_contact_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:orientation="vertical"
+            android:background="#F8F9FA"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/reggate_contact_title"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#333333"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:id="@+id/reggate_contact_phone_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp"
+                android:visibility="gone">
+                <TextView
+                    android:id="@+id/reggate_tv_contact_phone"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:textColor="#555555" />
+                <TextView
+                    android:id="@+id/reggate_tv_contact_phone_copy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#1565C0"
+                    android:text="@string/reggate_copy"
+                    android:paddingLeft="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/reggate_contact_email_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp"
+                android:visibility="gone">
+                <TextView
+                    android:id="@+id/reggate_tv_contact_email"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:textColor="#555555" />
+                <TextView
+                    android:id="@+id/reggate_tv_contact_email_copy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#1565C0"
+                    android:text="@string/reggate_copy"
+                    android:paddingLeft="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/reggate_contact_website_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp"
+                android:visibility="gone">
+                <TextView
+                    android:id="@+id/reggate_tv_contact_website"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:textColor="#555555" />
+                <TextView
+                    android:id="@+id/reggate_tv_contact_website_copy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#1565C0"
+                    android:text="@string/reggate_copy"
+                    android:paddingLeft="8dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/reggate_contact_shop_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="6dp"
+                android:visibility="gone">
+                <TextView
+                    android:id="@+id/reggate_tv_contact_shop"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="13sp"
+                    android:textColor="#555555" />
+                <TextView
+                    android:id="@+id/reggate_tv_contact_shop_copy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#1565C0"
+                    android:text="@string/reggate_copy"
+                    android:paddingLeft="8dp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/reggate_tv_contact_custom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="13sp"
+                android:textColor="#555555"
+                android:layout_marginBottom="6dp"
+                android:visibility="gone" />
+
+            <ImageView
+                android:id="@+id/reggate_iv_qr_code"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:visibility="gone"
+                android:contentDescription="@null" />
+
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

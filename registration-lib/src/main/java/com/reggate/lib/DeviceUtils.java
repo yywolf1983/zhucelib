@@ -58,4 +58,9 @@ public final class DeviceUtils {
         new SecureRandom().nextBytes(nonce);
         return nonce;
     }
+
+    /** 测试方法 - 用于验证增量构建 */
+    public static String getVersionInfo() {
+        return "registration-lib-v1.0";
+    }
 }

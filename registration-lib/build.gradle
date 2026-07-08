@@ -1,6 +1,42 @@
 apply plugin: 'com.android.library'
 
-buildDir = new File(rootProject.projectDir, "build/registration-lib")
+// 在配置阶段捕获值，避免执行期访问 Gradle 脚本对象
+def libDir = projectDir
+def rootDir = rootProject.projectDir
+
+tasks.register('encryptConfig') {
+    doLast {
+        def configDir = System.getenv('REGGATE_CONFIG_DIR') ?: '/Users/yy/pro-test/anddex-config'
+        def inputFile = new File(configDir, 'reggate_config.json')
+        def outputFile = new File(libDir, 'src/main/assets/reggate_config.dat')
+        
+        if (inputFile.exists()) {
+            def javaFile = new File(rootDir, 'scripts/EncryptConfig.java')
+            def classFile = new File(rootDir, 'scripts/EncryptConfig.class')
+            
+            // 使用 ProcessBuilder 替代 exec 闭包，避免配置缓存问题
+            def javacProc = new ProcessBuilder('javac', javaFile.absolutePath)
+                .directory(rootDir)
+                .inheritIO()
+                .start()
+            javacProc.waitFor()
+            
+            def javaProc = new ProcessBuilder('java', '-cp', 'scripts', 'EncryptConfig',
+                inputFile.absolutePath, outputFile.absolutePath)
+                .directory(rootDir)
+                .inheritIO()
+                .start()
+            javaProc.waitFor()
+            
+            classFile.delete()
+            println "Encrypted config: ${inputFile} -> ${outputFile}"
+        } else {
+            println "Warning: Config file not found at ${inputFile}"
+        }
+    }
+}
+
+preBuild.dependsOn encryptConfig
 
 android {
     namespace 'com.reggate.lib'

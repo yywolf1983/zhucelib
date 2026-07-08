@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.util.Log;
 
+import org.json.JSONObject;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,7 +65,6 @@ public final class RegGateConfig {
     private static final PromptTiming DEFAULT_PROMPT_TIMING = PromptTiming.EVERY_LAUNCH;
     private static final ExpireBehavior DEFAULT_EXPIRE_BEHAVIOR = ExpireBehavior.BLOCK;
     private static final long DEFAULT_FIRST_TRIAL_DELAY_MS = 0L;
-    private static final String DEFAULT_APP_NAME = "本应用";
 
     private static ConfigHolder holder;
     private static String defaultPublicKey = null;
@@ -75,6 +76,7 @@ public final class RegGateConfig {
     private final ExpireBehavior expireBehavior;
     private final long firstTrialDialogDelayMs;
     private final String appName;
+    private final ContactInfo contactInfo;
 
     private RegGateConfig(Builder b) {
         this.publicKeyBase64 = b.publicKeyBase64;
@@ -84,6 +86,7 @@ public final class RegGateConfig {
         this.expireBehavior = b.expireBehavior;
         this.firstTrialDialogDelayMs = b.firstTrialDialogDelayMs;
         this.appName = b.appName;
+        this.contactInfo = b.contactInfo;
     }
 
     /**
@@ -121,6 +124,20 @@ public final class RegGateConfig {
         return new Builder(null);
     }
 
+    /**
+     * 从配置文件初始化。配置文件优先级：
+     * 1. 应用 assets/reggate_config.json（优先）
+     * 2. 注册库 assets/reggate_config.json（默认）
+     *
+     * <pre>
+     * // 使用配置文件初始化
+     * RegGateConfig.init(this).mainActivity(MainActivity.class).loadFromConfig().build();
+     * </pre>
+     */
+    public static Builder initFromConfig(Context context) {
+        return new Builder(context).loadFromConfig();
+    }
+
     public static RegGateConfig get() {
         if (holder == null)
             throw new IllegalStateException("RegGateConfig 未初始化,请在 Application.onCreate 调用 RegGateConfig.init(context).mainActivity(...).build()");
@@ -138,6 +155,8 @@ public final class RegGateConfig {
     public long getTrialDurationMs() {
         return trialDays > 0 ? trialDays * 24L * 60L * 60L * 1000L : 0L;
     }
+
+    public ContactInfo getContactInfo() { return contactInfo; }
 
     private static final class ConfigHolder {
         final RegGateConfig config;
@@ -158,80 +177,110 @@ public final class RegGateConfig {
         private PromptTiming promptTiming = DEFAULT_PROMPT_TIMING;
         private ExpireBehavior expireBehavior = DEFAULT_EXPIRE_BEHAVIOR;
         private long firstTrialDialogDelayMs = DEFAULT_FIRST_TRIAL_DELAY_MS;
-        private String appName = DEFAULT_APP_NAME;
+        private String appName;
+        private ContactInfo contactInfo;
+
+        private boolean trialDaysSet = false;
+        private boolean promptTimingSet = false;
+        private boolean expireBehaviorSet = false;
+        private boolean firstTrialDialogDelayMsSet = false;
+        private boolean appNameSet = false;
+        private boolean contactInfoSet = false;
+        private boolean configLoaded = false;
 
         Builder(Context context) {
             this.context = context;
         }
 
-        /**
-         * 可选:自定义 RSA 公钥(Base64)。
-         * 不设置则使用库内置的公钥(res/raw/reggate_pub_key.txt)。
-         */
         public Builder publicKey(String publicKeyBase64) {
             this.publicKeyBase64 = publicKeyBase64;
             return this;
         }
 
-        /**
-         * 必填:注册通过后要启动的宿主主界面。
-         */
         public Builder mainActivity(Class<?> clazz) {
             this.mainActivityClass = clazz;
             return this;
         }
 
-        /**
-         * 试用天数。默认 7 天。
-         * 0 表示不提供试用(必须注册才能使用)。
-         */
         public Builder trialDays(int days) {
             this.trialDays = days;
+            this.trialDaysSet = true;
             return this;
         }
 
-        /**
-         * 注册框弹出时机。默认 FIRST_LAUNCH(首次启动弹框)。
-         * 可选:ON_EXPIRY(到期后才弹框), EVERY_LAUNCH(每次启动弹框)。
-         */
         public Builder promptTiming(PromptTiming t) {
             this.promptTiming = t;
+            this.promptTimingSet = true;
             return this;
         }
 
-        /**
-         * 到期后行为。默认 BLOCK(限制功能,必须注册)。
-         * 可选:NAG_ONLY(仅弹提示,用户可关闭继续使用)。
-         */
         public Builder expireBehavior(ExpireBehavior b) {
             this.expireBehavior = b;
+            this.expireBehaviorSet = true;
             return this;
         }
 
-        /**
-         * 首次启动弹框前的延迟(毫秒)。默认 0(立即弹出)。
-         */
         public Builder firstTrialDialogDelayMs(long ms) {
             this.firstTrialDialogDelayMs = ms;
+            this.firstTrialDialogDelayMsSet = true;
             return this;
         }
 
-        /**
-         * 应用名称,用于 UI 展示。默认"本应用"。
-         */
         public Builder appName(String name) {
             this.appName = name;
+            this.appNameSet = true;
             return this;
         }
 
-        /**
-         * 完成配置并初始化。
-         * 必须先调用 mainActivity()。
-         * 如果未调用 publicKey(),将使用库内置的默认公钥。
-         */
+        public Builder contactInfo(ContactInfo info) {
+            this.contactInfo = info;
+            this.contactInfoSet = true;
+            return this;
+        }
+
+        public Builder loadFromConfig() {
+            if (context == null) {
+                throw new IllegalStateException("loadFromConfig 需要 Context,请使用 init(context)");
+            }
+            JSONObject config = RegGateConfigLoader.loadConfig(context);
+
+            if (!trialDaysSet) {
+                this.trialDays = RegGateConfigLoader.getInt(config, "trial_days", DEFAULT_TRIAL_DAYS);
+            }
+            if (!promptTimingSet) {
+                this.promptTiming = RegGateConfigLoader.getPromptTiming(config);
+            }
+            if (!expireBehaviorSet) {
+                this.expireBehavior = RegGateConfigLoader.getExpireBehavior(config);
+            }
+            if (!firstTrialDialogDelayMsSet) {
+                this.firstTrialDialogDelayMs = RegGateConfigLoader.getLong(config, "first_trial_delay_ms", DEFAULT_FIRST_TRIAL_DELAY_MS);
+            }
+            if (!appNameSet) {
+                String configAppName = RegGateConfigLoader.getString(config, "app_name", "");
+                if (!configAppName.isEmpty()) {
+                    this.appName = configAppName;
+                }
+            }
+            if (!contactInfoSet) {
+                this.contactInfo = RegGateConfigLoader.getContactInfo(context, config);
+            }
+
+            this.configLoaded = true;
+            return this;
+        }
+
         public void build() {
             if (mainActivityClass == null)
                 throw new IllegalStateException("RegGateConfig: mainActivity 未设置");
+
+            if (!configLoaded && context != null) {
+                try {
+                    loadFromConfig();
+                } catch (Exception e) {
+                    // 配置文件加载失败,使用默认值
+                }
+            }
 
             if (publicKeyBase64 == null || publicKeyBase64.length() == 0) {
                 if (context == null) {
@@ -240,6 +289,18 @@ public final class RegGateConfig {
                 publicKeyBase64 = getDefaultPublicKey(context);
                 if (publicKeyBase64 == null || publicKeyBase64.length() == 0) {
                     throw new IllegalStateException("RegGateConfig: 无法读取默认公钥(res/raw/reggate_pub_key.txt)");
+                }
+            }
+
+            if (appName == null || appName.isEmpty()) {
+                if (context != null) {
+                    try {
+                        appName = context.getPackageManager().getApplicationLabel(context.getApplicationInfo()).toString();
+                    } catch (Exception e) {
+                        appName = "应用";
+                    }
+                } else {
+                    appName = "应用";
                 }
             }
 
