@@ -566,6 +566,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showDeviceDetail(RegRecordManager.DevicePackageGroup group) {
+        android.app.AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("设备详情")
+                .setPositiveButton("关闭", null)
+                .create();
+
         ScrollView scrollView = new ScrollView(this);
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -670,7 +675,10 @@ public class MainActivity extends AppCompatActivity {
 
                 LinearLayout infoCol = new LinearLayout(this);
                 infoCol.setOrientation(LinearLayout.VERTICAL);
-                infoCol.setPadding(dp(8), 0, 0, 0);
+                infoCol.setPadding(dp(8), 0, dp(8), 0);
+                LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+                infoCol.setLayoutParams(infoParams);
 
                 // 时间行
                 TextView tvTime = new TextView(this);
@@ -688,6 +696,34 @@ public class MainActivity extends AppCompatActivity {
                 infoCol.addView(tvMeta);
 
                 recordRow.addView(infoCol);
+
+                // 删除按钮
+                final RegRecordManager.Record delRecord = r;
+                TextView tvDel = new TextView(this);
+                tvDel.setText("删除");
+                tvDel.setTextSize(10);
+                tvDel.setTextColor(0xFFE53935);
+                tvDel.setPadding(dp(6), dp(4), dp(6), dp(4));
+                tvDel.setClickable(true);
+                tvDel.setFocusable(true);
+                tvDel.setOnClickListener(v -> {
+                    new AlertDialog.Builder(this)
+                            .setTitle("确认删除")
+                            .setMessage("删除 " + delRecord.packageName + " 的这条注册记录？"
+                                    + "\n\n时间: " + delRecord.regAt
+                                    + "\n时长: " + (delRecord.validDays == 0 ? "永久" : delRecord.validDays + " 天"))
+                            .setPositiveButton("删除", (d, w) -> {
+                                RegRecordManager.deleteById(this, delRecord.id);
+                                refreshRecordCount();
+                                refreshDeviceOverview();
+                                toast("已删除");
+                                dialog.dismiss();
+                            })
+                            .setNegativeButton("取消", null)
+                            .show();
+                });
+                recordRow.addView(tvDel);
+
                 pkgCard.addView(recordRow);
 
                 // 记录间分隔线（非最后一条）
@@ -705,12 +741,8 @@ public class MainActivity extends AppCompatActivity {
 
         scrollView.addView(container);
 
-        new AlertDialog.Builder(this)
-                .setTitle("设备详情")
-                .setView(scrollView)
-                .setNegativeButton("删除全部", (d, w) -> confirmDeleteDeviceOverview(group))
-                .setPositiveButton("关闭", null)
-                .show();
+        dialog.setView(scrollView);
+        dialog.show();
     }
 
     private void confirmDeleteDeviceOverview(RegRecordManager.DevicePackageGroup group) {
