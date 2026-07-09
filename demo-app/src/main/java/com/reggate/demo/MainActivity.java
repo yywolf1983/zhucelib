@@ -91,6 +91,13 @@ public class MainActivity extends AppCompatActivity {
         } else {
             sb.append("仅弹提示(可继续使用)");
         }
+
+        long first = manager.getFirstLaunchMs();
+        if (first > 0) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd",
+                    java.util.Locale.getDefault());
+            sb.append("\n首次启动: ").append(sdf.format(new java.util.Date(first)));
+        }
         tvLimits.setText(sb.toString());
     }
 }
