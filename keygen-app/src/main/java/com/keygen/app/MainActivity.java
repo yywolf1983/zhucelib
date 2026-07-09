@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvPrivStatus;
     private EditText etRequestCode;
     private EditText etValidDays;
+    private TextView tvPackageInfo;
     private TextView tvActivationCode;
     private TextView tvValidDaysResult;
     private TextView tvExpiryResult;
@@ -68,6 +69,7 @@ public class MainActivity extends AppCompatActivity {
         etRequestCode = findViewById(R.id.et_request_code);
         etValidDays = findViewById(R.id.et_valid_days);
         etValidDays.setText("365");
+        tvPackageInfo = findViewById(R.id.tv_package_info);
         tvActivationCode = findViewById(R.id.tv_activation_code);
         tvValidDaysResult = findViewById(R.id.tv_valid_days_result);
         tvExpiryResult = findViewById(R.id.tv_expiry_result);
@@ -209,6 +211,21 @@ public class MainActivity extends AppCompatActivity {
         try {
             final String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
 
+            // 从安装码中提取并显示包信息
+            String deviceIdHex = RegRecordManager.extractDeviceIdHex(requestCode);
+            String pkgName = RegRecordManager.extractPackageNameFromRequest(requestCode);
+            if (deviceIdHex != null) {
+                StringBuilder info = new StringBuilder();
+                if (pkgName != null && !pkgName.isEmpty()) {
+                    info.append(pkgName).append("  ·  ");
+                }
+                info.append("设备: ").append(deviceIdHex);
+                tvPackageInfo.setText(info.toString());
+                tvPackageInfo.setVisibility(View.VISIBLE);
+            } else {
+                tvPackageInfo.setVisibility(View.GONE);
+            }
+
             tvActivationCode.setText(code);
             tvValidDaysResult.setText("购买时长: " + (validDays == 0 ? "永久" : validDays + " 天"));
             tvExpiryResult.setText("到期: " + KeygenUtils.formatExpiry(validDays));
@@ -332,6 +349,7 @@ public class MainActivity extends AppCompatActivity {
 
             tvPubKey.setText(pubB64);
             tvPrivStatus.setText("私钥已加载: " + uri.getLastPathSegment());
+            tvPackageInfo.setVisibility(View.GONE);
             tvActivationCode.setText("");
             tvValidDaysResult.setText("");
             tvExpiryResult.setText("");

@@ -176,6 +176,17 @@
             android:text="@string/kg_generate" />
 
         <TextView
+            android:id="@+id/tv_package_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:textSize="12sp"
+            android:textColor="#555"
+            android:visibility="gone"
+            tools:visibility="visible"
+            tools:text="com.example.app · 设备: A1B2C3D4E5F6" />
+
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
