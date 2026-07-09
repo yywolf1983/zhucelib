@@ -16,6 +16,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -565,19 +566,111 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showDeviceDetail(RegRecordManager.DevicePackageGroup group) {
-        // 汇总所有记录为历史列表
-        List<RegRecordManager.Record> allRecords = new ArrayList<>();
-        for (RegRecordManager.PackageGroup pg : group.packageGroups) {
-            allRecords.addAll(pg.records);
-        }
-        allRecords.sort((a, b) -> Long.compare(b.id, a.id));
-
-        String text = RegRecordManager.formatHistory(allRecords, false);
         final boolean[] showAct = {false};
+
+        // 构建内容视图：按包分组展示
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dp(16), dp(12), dp(16), dp(8));
+        scrollView.addView(container);
+
+        // 设备标题
+        TextView tvDevTitle = new TextView(this);
+        tvDevTitle.setText("设备: " + group.deviceId);
+        tvDevTitle.setTextSize(13);
+        tvDevTitle.setTextColor(0xFF1976D2);
+        tvDevTitle.setTypeface(null, Typeface.BOLD);
+        tvDevTitle.setPadding(0, 0, 0, dp(4));
+        container.addView(tvDevTitle);
+
+        TextView tvTotalInfo = new TextView(this);
+        tvTotalInfo.setText(group.packageGroups.size() + " 个包 · 共 " + group.getTotalRecordCount() + " 条记录");
+        tvTotalInfo.setTextSize(11);
+        tvTotalInfo.setTextColor(0xFF888888);
+        tvTotalInfo.setPadding(0, 0, 0, dp(8));
+        container.addView(tvTotalInfo);
+
+        // 分隔线
+        View divider = new View(this);
+        divider.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+        divider.setBackgroundColor(0xFFDDDDDD);
+        container.addView(divider);
+
+        // 按包名分组展示
+        for (int pi = 0; pi < group.packageGroups.size(); pi++) {
+            RegRecordManager.PackageGroup pg = group.packageGroups.get(pi);
+
+            if (pi > 0) {
+                View pkgDiv = new View(this);
+                pkgDiv.setLayoutParams(new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+                pkgDiv.setBackgroundColor(0xFFE8E8E8);
+                container.addView(pkgDiv);
+            }
+
+            // 包名头部
+            LinearLayout pkgHeader = new LinearLayout(this);
+            pkgHeader.setOrientation(LinearLayout.HORIZONTAL);
+            pkgHeader.setGravity(Gravity.CENTER_VERTICAL);
+            pkgHeader.setPadding(0, dp(6), 0, dp(2));
+
+            View dot = new View(this);
+            dot.setLayoutParams(new LinearLayout.LayoutParams(dp(8), dp(8)));
+            dot.setBackgroundColor(0xFF7B1FA2);
+            pkgHeader.addView(dot);
+
+            TextView tvPkgName = new TextView(this);
+            tvPkgName.setText("  " + pg.packageName + "  (" + pg.records.size() + " 次)");
+            tvPkgName.setTextSize(12);
+            tvPkgName.setTextColor(0xFF7B1FA2);
+            tvPkgName.setTypeface(Typeface.MONOSPACE);
+            pkgHeader.addView(tvPkgName);
+            container.addView(pkgHeader);
+
+            // 该包下的每条记录
+            for (int ri = 0; ri < pg.records.size(); ri++) {
+                RegRecordManager.Record r = pg.records.get(ri);
+                String dur = r.validDays == 0 ? "永久" : r.validDays + "天";
+
+                TextView tvRecord = new TextView(this);
+                tvRecord.setTextSize(11);
+                tvRecord.setTextColor(0xFF333333);
+                tvRecord.setTypeface(Typeface.MONOSPACE);
+                tvRecord.setPadding(dp(16), dp(2), 0, 0);
+
+                StringBuilder line = new StringBuilder();
+                line.append(r.regAt).append("  ").append(dur).append("  到期:").append(r.expiryDate);
+                tvRecord.setText(line.toString());
+
+                container.addView(tvRecord);
+
+                // 激活码（可切换显示）
+                if (ri == 0) {
+                    TextView tvActIntro = new TextView(this);
+                    tvActIntro.setTextSize(10);
+                    tvActIntro.setTextColor(0xFF888888);
+                    tvActIntro.setPadding(dp(16), 0, 0, 0);
+                    tvActIntro.setVisibility(View.GONE);
+                    tvActIntro.setTag("act_intro");
+                    container.addView(tvActIntro);
+
+                    TextView tvActCode = new TextView(this);
+                    tvActCode.setTextSize(10);
+                    tvActCode.setTextColor(0xFF1565C0);
+                    tvActCode.setTypeface(Typeface.MONOSPACE);
+                    tvActCode.setPadding(dp(16), dp(1), 0, 0);
+                    tvActCode.setVisibility(View.GONE);
+                    tvActCode.setTag("act_code");
+                    container.addView(tvActCode);
+                }
+            }
+        }
 
         android.app.AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("设备 " + group.deviceId)
-                .setMessage(text)
+                .setView(scrollView)
                 .setPositiveButton("显示激活码", null)
                 .setNeutralButton("关闭", null)
                 .setNegativeButton("删除全部", (d, w) -> confirmDeleteDeviceOverview(group))
@@ -587,10 +680,43 @@ public class MainActivity extends AppCompatActivity {
             android.widget.Button btnToggle = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             btnToggle.setOnClickListener(v -> {
                 showAct[0] = !showAct[0];
-                String newText = RegRecordManager.formatHistory(allRecords, showAct[0]);
-                android.widget.TextView msgTv = (android.widget.TextView) dialog.findViewById(android.R.id.message);
-                if (msgTv != null) msgTv.setText(newText);
                 btnToggle.setText(showAct[0] ? "隐藏激活码" : "显示激活码");
+
+                // 遍历更新每条记录的激活码显示
+                int pkgIdx = 0;
+                for (int ci = 0; ci < container.getChildCount(); ci++) {
+                    View child = container.getChildAt(ci);
+                    String tag = (String) child.getTag();
+                    if ("act_intro".equals(tag) || "act_code".equals(tag)) {
+                        child.setVisibility(showAct[0] ? View.VISIBLE : View.GONE);
+                    }
+                }
+                // 填充每条记录的激活码内容
+                if (showAct[0]) {
+                    int recordIdx = 0;
+                    int actPairIdx = 0;
+                    for (RegRecordManager.PackageGroup pg : group.packageGroups) {
+                        for (int ri = 0; ri < pg.records.size(); ri++) {
+                            RegRecordManager.Record r = pg.records.get(ri);
+                            if (ri == 0) {
+                                // 查找对应的 act_intro 和 act_code
+                                int found = 0;
+                                for (int ci = 0; ci < container.getChildCount(); ci++) {
+                                    View child = container.getChildAt(ci);
+                                    String tag = (String) child.getTag();
+                                    if ("act_intro".equals(tag) && found == actPairIdx * 2) {
+                                        ((TextView) child).setText("激活码:");
+                                        found++;
+                                    } else if ("act_code".equals(tag) && found == actPairIdx * 2 + 1) {
+                                        ((TextView) child).setText(r.activationCode);
+                                        actPairIdx++;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             });
         });
 
