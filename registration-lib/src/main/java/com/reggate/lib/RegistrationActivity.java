@@ -42,12 +42,12 @@ public class RegistrationActivity extends Activity {
 
     private RegistrationManager manager;
 
+    private boolean isAnomaly;
     private TextView tvRequestCode;
     private TextView tvHint;
     private EditText etActivationCode;
     private Button btnActivate;
     private Button btnPaste;
-    private Button btnRegenerate;
 
     private LinearLayout contactContainer;
     private TextView tvContactPhone;
@@ -79,7 +79,7 @@ public class RegistrationActivity extends Activity {
         String appName = getIntent().getStringExtra(EXTRA_APP_NAME);
         boolean expired = getIntent().getBooleanExtra(EXTRA_EXPIRED, false);
         boolean timeTampered = getIntent().getBooleanExtra(EXTRA_TIME_TAMPERED, false);
-        boolean anomaly = getIntent().getBooleanExtra(EXTRA_ANOMALY, false);
+        isAnomaly = getIntent().getBooleanExtra(EXTRA_ANOMALY, false);
         int trialRemaining = getIntent().getIntExtra(EXTRA_TRIAL_REMAINING_DAYS, 0);
         int licenseRemaining = getIntent().getIntExtra(EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
 
@@ -90,7 +90,6 @@ public class RegistrationActivity extends Activity {
         btnActivate = findViewById(RegGateResources.getId(this, "reggate_btn_activate"));
         btnPaste = findViewById(RegGateResources.getId(this, "reggate_btn_paste"));
         Button btnCopyCode = findViewById(RegGateResources.getId(this, "reggate_btn_copy_code"));
-        btnRegenerate = findViewById(RegGateResources.getId(this, "reggate_btn_regenerate"));
 
         contactContainer = findViewById(RegGateResources.getId(this, "reggate_contact_container"));
         tvContactPhone = findViewById(RegGateResources.getId(this, "reggate_tv_contact_phone"));
@@ -110,7 +109,7 @@ public class RegistrationActivity extends Activity {
         showRequestCode();
         setupContactInfo();
 
-        if (anomaly) {
+        if (isAnomaly) {
             tvHint.setText(RegGateResources.getString(this, "reggate_hint_registration_anomaly"));
             tvHint.setTextColor(0xFFE53935);
         } else if (timeTampered) {
@@ -136,11 +135,6 @@ public class RegistrationActivity extends Activity {
             cm.setPrimaryClip(ClipData.newPlainText("request_code",
                     Base32.ungroup(tvRequestCode.getText().toString())));
             Toast.makeText(this, RegGateResources.getString(this, "reggate_request_copied"), Toast.LENGTH_SHORT).show();
-        });
-
-        btnRegenerate.setOnClickListener(v -> {
-            tvRequestCode.setText(Base32.group(manager.regenerateRequestCode(), 4));
-            Toast.makeText(this, RegGateResources.getString(this, "reggate_request_regenerated"), Toast.LENGTH_SHORT).show();
         });
 
         btnPaste.setOnClickListener(v -> {
@@ -191,11 +185,12 @@ public class RegistrationActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (manager.canEnterMain()) {
+        // 异常状态下不允许返回主界面（否则守卫会再次拦截，造成死循环）
+        if (isAnomaly || !manager.canEnterMain()) {
+            finishAffinity();
+        } else {
             setResult(RESULT_CANCELED);
             finish();
-        } else {
-            finishAffinity();
         }
     }
 

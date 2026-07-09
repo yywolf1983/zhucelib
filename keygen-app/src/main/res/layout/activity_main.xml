@@ -118,18 +118,6 @@
             android:orientation="horizontal">
 
             <Button
-                android:id="@+id/btn_query_device"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/kg_query_device" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-
-            <Button
                 android:id="@+id/btn_paste_request"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content"
@@ -137,16 +125,30 @@
                 android:text="@string/kg_paste_request" />
         </LinearLayout>
 
+        <!-- 设备总览 -->
         <TextView
-            android:id="@+id/tv_query_result"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="设备总览"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <TextView
+            android:id="@+id/tv_device_overview_summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:paddingStart="4dp"
-            android:textSize="12sp"
+            android:textSize="11sp"
+            android:textColor="#AAA"
             android:visibility="gone"
-            tools:text="已注册 · 3次 · 到期: 2027-07-09"
-            tools:visibility="visible" />
+            tools:text="1 个设备 · 3 个包 · 共 5 条记录" />
+
+        <LinearLayout
+            android:id="@+id/ll_device_overview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
         <TextView
             android:layout_width="match_parent"
@@ -300,31 +302,6 @@
                 android:enabled="false"
                 android:text="@string/kg_export_records" />
         </LinearLayout>
-
-        <!-- 设备总览 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="设备总览"
-            android:textStyle="bold"
-            android:textColor="#1976D2" />
-
-        <TextView
-            android:id="@+id/tv_device_overview_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textSize="11sp"
-            android:textColor="#AAA"
-            android:visibility="gone"
-            tools:text="1 个设备 · 3 个包 · 共 5 条记录" />
-
-        <LinearLayout
-            android:id="@+id/ll_device_overview"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical" />
 
         <View
             android:layout_width="match_parent"

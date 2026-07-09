@@ -44,8 +44,16 @@ new SecureRandom().nextBytes(nonce);
 ### 第三步：生成安装码（客户端）
 
 ```
-安装码原始数据(20字节) = deviceId[12] || nonce[8]
-安装码字符串 = Crockford Base32 编码(原始数据)，按每组4字符用 "-" 分隔
+payload = nonce[8] || deviceId[12] || pkgLen[2 BE] || packageName_utf8[pkgLen]
+不含包名时 pkgLen=0。
+
+V2 两步 XOR 加扰:
+  1. fixed_ks = SHA-256_CTR(fixed_seed)  // 固定密钥流
+  2. XOR nonce 部分(前 8 字节) 与 fixed_ks[0:7]  // nonce 可被解码侧恢复
+  3. nonce_ks = SHA-256_CTR(fixed_seed || nonce)  // nonce 驱动密钥流
+  4. XOR 剩余部分(deviceId || pkgLen || pkgBytes) 与 nonce_ks  // 全位随机变化
+
+安装码字符串 = Crockford Base32 编码(0x01 || scrambled_payload)，按每组4字符用 "-" 分隔
 ```
 
 示例格式：`ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ01-2345`
@@ -54,8 +62,13 @@ new SecureRandom().nextBytes(nonce);
 
 ```
 raw = Crockford Base32 解码(安装码)
-deviceId = raw[0..11]
-nonce    = raw[12..19]
+验证版本字节 0x01
+
+V2 两步解扰:
+  1. fixed_ks = SHA-256_CTR(fixed_seed)  // 与客户端相同的固定密钥流
+  2. nonce[i] = data[i] XOR fixed_ks[i], i=0..7  // 恢复 nonce
+  3. nonce_ks = SHA-256_CTR(fixed_seed || nonce)  // 用恢复的 nonce 派生密钥流
+  4. rest[i] = data[8+i] XOR nonce_ks[i]  // 恢复 deviceId || pkgLen || pkgBytes
 ```
 
 ### 第五步：构建签名消息

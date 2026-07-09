@@ -244,55 +244,114 @@ public final class RegistrationManager {
     }
 
     /**
-     * 编码安装码: deviceId[12] || nonce[8] || pkgLen[2 BE] || packageName_utf8[pkgLen]
-     * 不含包名时 pkgLen=0(向后兼容旧格式 20 字节)。
+     * 编码安装码 V2: 0x01 || XOR(nonce || deviceId || pkg, keystream)。
+     * payload = nonce[8] || deviceId[12] || pkgLen[2 BE] || packageName_utf8[pkgLen]
+     * 不含包名时 pkgLen=0。
+     * nonce 部分用固定种子密钥 XOR（解码侧可先恢复 nonce），
+     * 其余部分用 nonce 派生密钥流 XOR，使每次生成的安装码全位随机变化。
      */
     private static String buildRequestCode(byte[] deviceId, byte[] nonce, String packageName) {
         byte[] pkgBytes = (packageName != null && !packageName.isEmpty())
                 ? packageName.getBytes(StandardCharsets.UTF_8) : new byte[0];
         int pkgLen = Math.min(pkgBytes.length, 65535);
         int off = 0;
-        byte[] data = new byte[deviceId.length + nonce.length + 2 + pkgLen];
-        System.arraycopy(deviceId, 0, data, off, deviceId.length);
-        off += deviceId.length;
-        System.arraycopy(nonce, 0, data, off, nonce.length);
+        // 重新排列: nonce 放在前面，便于解码侧先恢复 nonce
+        byte[] payload = new byte[nonce.length + deviceId.length + 2 + pkgLen];
+        System.arraycopy(nonce, 0, payload, off, nonce.length);
         off += nonce.length;
-        data[off++] = (byte) (pkgLen >> 8);
-        data[off++] = (byte) pkgLen;
-        if (pkgLen > 0) System.arraycopy(pkgBytes, 0, data, off, pkgLen);
-        return Base32.encode(data);
+        System.arraycopy(deviceId, 0, payload, off, deviceId.length);
+        off += deviceId.length;
+        payload[off++] = (byte) (pkgLen >> 8);
+        payload[off++] = (byte) pkgLen;
+        if (pkgLen > 0) System.arraycopy(pkgBytes, 0, payload, off, pkgLen);
+
+        // V2: nonce 部分用固定密钥流 XOR；其余用 nonce 派生密钥流 XOR
+        byte[] fixedKs = CryptoUtils.deriveRequestKeystream(payload.length);
+        if (fixedKs == null) return null;
+        // XOR nonce 部分 (前 8 字节)
+        CryptoUtils.xorScrambleRange(payload, fixedKs, 0, nonce.length);
+        // 用恢复后的 nonce 派生第二层密钥流，XOR 剩余部分
+        byte[] nonceKs = CryptoUtils.deriveRequestKeystreamWithNonce(nonce, payload.length - nonce.length);
+        if (nonceKs == null) return null;
+        CryptoUtils.xorScrambleRange(payload, nonceKs, nonce.length, payload.length - nonce.length);
+
+        byte[] v2data = new byte[1 + payload.length];
+        v2data[0] = (byte) 0x01;
+        System.arraycopy(payload, 0, v2data, 1, payload.length);
+        return Base32.encode(v2data);
+    }
+
+    /**
+     * 解码安装码：V2 格式两步解扰，V1 格式直通（向后兼容）。
+     * V2 payload 排列: nonce[8] || deviceId[12] || pkgLen[2] || pkgBytes
+     * @return 解码后的完整 payload（nonce-first），失败返回 null。
+     */
+    private static byte[] decodeRequestPayload(String requestCode) {
+        byte[] raw = Base32.decode(requestCode);
+        if (raw == null || raw.length < 1) return null;
+        if (raw[0] == (byte) 0x01) {
+            byte[] data = new byte[raw.length - 1];
+            System.arraycopy(raw, 1, data, 0, data.length);
+
+            if (data.length < CryptoUtils.NONCE_LEN + CryptoUtils.DEVICE_ID_LEN) return null;
+
+            // 第一步: 用固定密钥流恢复 nonce（前 8 字节）
+            byte[] fixedKs = CryptoUtils.deriveRequestKeystream(data.length);
+            if (fixedKs == null) return null;
+            byte[] nonce = new byte[CryptoUtils.NONCE_LEN];
+            for (int i = 0; i < CryptoUtils.NONCE_LEN; i++) {
+                nonce[i] = (byte) (data[i] ^ fixedKs[i]);
+            }
+
+            // 第二步: 用 nonce 派生密钥流恢复 deviceId + pkg（剩余字节）
+            int restLen = data.length - CryptoUtils.NONCE_LEN;
+            byte[] nonceKs = CryptoUtils.deriveRequestKeystreamWithNonce(nonce, restLen);
+            if (nonceKs == null) return null;
+            byte[] rest = new byte[restLen];
+            for (int i = 0; i < restLen; i++) {
+                rest[i] = (byte) (data[CryptoUtils.NONCE_LEN + i] ^ nonceKs[i]);
+            }
+
+            // 拼接恢复后的完整 payload: nonce || deviceId || pkg
+            byte[] payload = new byte[CryptoUtils.NONCE_LEN + restLen];
+            System.arraycopy(nonce, 0, payload, 0, CryptoUtils.NONCE_LEN);
+            System.arraycopy(rest, 0, payload, CryptoUtils.NONCE_LEN, restLen);
+            return payload;
+        }
+        return raw; // V1 旧格式，直通
     }
 
     public static byte[] extractNonceFromRequestCode(String requestCode) {
-        byte[] data = Base32.decode(requestCode);
-        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
+        byte[] data = decodeRequestPayload(requestCode);
+        if (data == null || data.length < CryptoUtils.NONCE_LEN) return null;
         byte[] nonce = new byte[CryptoUtils.NONCE_LEN];
-        System.arraycopy(data, CryptoUtils.DEVICE_ID_LEN, nonce, 0, nonce.length);
+        System.arraycopy(data, 0, nonce, 0, nonce.length);
         return nonce;
     }
 
     public static byte[] extractDeviceIdFromRequestCode(String requestCode) {
-        byte[] data = Base32.decode(requestCode);
-        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
+        byte[] data = decodeRequestPayload(requestCode);
+        if (data == null || data.length < CryptoUtils.NONCE_LEN + CryptoUtils.DEVICE_ID_LEN) return null;
         byte[] id = new byte[CryptoUtils.DEVICE_ID_LEN];
-        System.arraycopy(data, 0, id, 0, id.length);
+        System.arraycopy(data, CryptoUtils.NONCE_LEN, id, 0, id.length);
         return id;
     }
 
     /**
      * 从安装码中提取包名。无包名返回空字符串，解析失败返回 null。
+     * payload 排列: nonce[8] || deviceId[12] || pkgLen[2] || pkgBytes
      */
     @androidx.annotation.Nullable
     public static String extractPackageNameFromRequestCode(String requestCode) {
-        byte[] data = Base32.decode(requestCode);
-        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN + 2) {
-            // 旧格式安装码，无包名
-            return (data != null && data.length >= CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) ? "" : null;
+        byte[] data = decodeRequestPayload(requestCode);
+        int minLen = CryptoUtils.NONCE_LEN + CryptoUtils.DEVICE_ID_LEN;
+        if (data == null || data.length < minLen + 2) {
+            return (data != null && data.length >= minLen) ? "" : null;
         }
-        int off = CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN;
+        int off = minLen;
         int pkgLen = ((data[off] & 0xFF) << 8) | (data[off + 1] & 0xFF);
         if (pkgLen == 0) return "";
-        if (pkgLen < 0 || off + 2 + pkgLen > data.length) return null;
+        if (off + 2 + pkgLen > data.length) return null;
         return new String(data, off + 2, pkgLen, StandardCharsets.UTF_8);
     }
 

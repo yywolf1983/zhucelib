@@ -2,6 +2,9 @@ package com.reggate.lib;
 
 import android.util.Base64;
 
+import androidx.annotation.Nullable;
+
+import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.PublicKey;
@@ -36,6 +39,18 @@ final class CryptoUtils {
     private static final int SIG_LEN = 256;
 
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
+
+    // 安装码 XOR 加扰固定密钥（SHA-256("RegGate.Request.ScrambleKey.v1")）
+    private static final byte[] REQUEST_SCRAMBLE_KEY;
+    static {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            REQUEST_SCRAMBLE_KEY = md.digest(
+                    "RegGate.Request.ScrambleKey.v1".getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     private CryptoUtils() {}
 
@@ -76,6 +91,51 @@ final class CryptoUtils {
     static void xorScramble(byte[] payload, byte[] keystream) {
         for (int i = 0; i < payload.length; i++) {
             payload[i] ^= keystream[i];
+        }
+    }
+
+    /** 对指定范围的载荷做 XOR 置乱/解乱。 */
+    static void xorScrambleRange(byte[] payload, byte[] keystream, int offset, int length) {
+        for (int i = 0; i < length; i++) {
+            payload[offset + i] ^= keystream[i];
+        }
+    }
+
+    /**
+     * 从固定种子密钥派生安装码 XOR 密钥流（SHA-256 CTR 模式）。
+     * 注册库和注册机端密钥一致，确保安装码外观随机且可逆。
+     */
+    static byte[] deriveRequestKeystream(int length) {
+        return deriveRequestKeystreamWithNonce(null, length);
+    }
+
+    /**
+     * 从固定种子 + nonce 派生安装码 XOR 密钥流（SHA-256 CTR 模式）。
+     * nonce 非空时密钥流绑定到当前 nonce，使每次生成的安装码全位随机变化。
+     * nonce 为空时退化为纯固定密钥流（用于解码 nonce 本身）。
+     */
+    static byte[] deriveRequestKeystreamWithNonce(@Nullable byte[] nonce, int length) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] keystream = new byte[length];
+            boolean hasNonce = nonce != null && nonce.length > 0;
+            for (int block = 0; block < length; block += 32) {
+                md.reset();
+                md.update(REQUEST_SCRAMBLE_KEY);
+                if (hasNonce) {
+                    md.update(nonce);
+                }
+                md.update((byte) (block >> 24));
+                md.update((byte) (block >> 16));
+                md.update((byte) (block >> 8));
+                md.update((byte) block);
+                byte[] hash = md.digest();
+                int copyLen = Math.min(32, length - block);
+                System.arraycopy(hash, 0, keystream, block, copyLen);
+            }
+            return keystream;
+        } catch (Exception e) {
+            return null; // NEVER happen
         }
     }
 

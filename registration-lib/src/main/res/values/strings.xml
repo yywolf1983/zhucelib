@@ -4,13 +4,11 @@
     <string name="reggate_register_title">激活 - %1$s</string>
     <string name="reggate_request_code_label">本机安装码</string>
     <string name="reggate_copy_request">复制安装码</string>
-    <string name="reggate_regenerate">换一个</string>
     <string name="reggate_activation_code_label">激活码</string>
     <string name="reggate_activation_code_hint">在此粘贴激活码</string>
     <string name="reggate_paste">粘贴</string>
     <string name="reggate_activate">激活</string>
     <string name="reggate_request_copied">安装码已复制</string>
-    <string name="reggate_request_regenerated">已重新生成安装码</string>
     <string name="reggate_activate_success">激活成功</string>
     <string name="reggate_how_to">复制安装码获取激活码后粘贴到此处并点击"激活"。</string>
 

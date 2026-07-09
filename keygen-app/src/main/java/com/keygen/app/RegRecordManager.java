@@ -136,6 +136,35 @@ final class RegRecordManager {
         }
     }
 
+    /** 包分组视图: 设备下的一个包 + 其所有注册记录（按时间降序）。 */
+    static final class PackageGroup {
+        public final String packageName;
+        public final List<Record> records;  // 该包的所有记录，按 id 降序
+
+        PackageGroup(String packageName, List<Record> records) {
+            this.packageName = packageName;
+            this.records = records;
+        }
+    }
+
+    /** 设备+包二层分组视图: 设备 → 包名分组 → 记录列表。 */
+    static final class DevicePackageGroup {
+        public final String deviceId;
+        public final List<PackageGroup> packageGroups;  // 按最新记录时间降序排列
+
+        DevicePackageGroup(String deviceId, List<PackageGroup> packageGroups) {
+            this.deviceId = deviceId;
+            this.packageGroups = packageGroups;
+        }
+
+        /** 该设备下总记录数。 */
+        public int getTotalRecordCount() {
+            int count = 0;
+            for (PackageGroup pg : packageGroups) count += pg.records.size();
+            return count;
+        }
+    }
+
     // ==================== Storage Path ====================
 
     static boolean isCustomStorage(Context ctx) {
@@ -188,12 +217,9 @@ final class RegRecordManager {
 
     @Nullable
     static String extractDeviceIdHex(String ungroupedRequestCode) {
-        byte[] data = Base32.decode(ungroupedRequestCode);
-        if (data == null || data.length < KeygenUtils.DEVICE_ID_LEN + KeygenUtils.NONCE_LEN)
-            return null;
-        byte[] deviceId = new byte[KeygenUtils.DEVICE_ID_LEN];
-        System.arraycopy(data, 0, deviceId, 0, KeygenUtils.DEVICE_ID_LEN);
-        return bytesToHex(deviceId);
+        byte[][] parsed = KeygenUtils.parseRequestCode(ungroupedRequestCode);
+        if (parsed == null) return null;
+        return bytesToHex(parsed[0]);
     }
 
     /**
@@ -253,11 +279,24 @@ final class RegRecordManager {
     }
 
     /**
-     * 按激活码覆盖：删除旧记录（如存在），追加新记录。
-     * 保证同一激活码只有一条记录。
+     * 按安装码查找已有记录（同一安装码重复生成=覆盖旧记录）。
+     * 不存在返回 null。
      */
-    static void upsertByActivationCode(Context ctx, String rawRequestCode, int validDays,
-                                       String activationCode, String packageName) {
+    @Nullable
+    static Record findByRequestCode(Context ctx, String rawRequestCode) {
+        if (rawRequestCode == null || rawRequestCode.isEmpty()) return null;
+        for (Record r : readRecords(ctx)) {
+            if (rawRequestCode.equals(r.requestCode)) return r;
+        }
+        return null;
+    }
+
+    /**
+     * 按安装码覆盖：删除旧记录（如存在），追加新记录。
+     * 保证同一安装码只有一条最新记录。
+     */
+    static void upsertByRequestCode(Context ctx, String rawRequestCode, int validDays,
+                                    String activationCode, String packageName) {
         String deviceId = extractDeviceIdHex(rawRequestCode);
         if (deviceId == null) {
             Log.w(TAG, "无法解析安装码,跳过记录保存");
@@ -266,14 +305,12 @@ final class RegRecordManager {
 
         List<Record> records = readRecords(ctx);
 
-        // 删除同激活码的旧记录
-        if (activationCode != null && !activationCode.isEmpty()) {
-            Iterator<Record> it = records.iterator();
-            while (it.hasNext()) {
-                if (activationCode.equals(it.next().activationCode)) {
-                    it.remove();
-                    break;
-                }
+        // 删除同安装码的旧记录
+        Iterator<Record> it = records.iterator();
+        while (it.hasNext()) {
+            if (rawRequestCode.equals(it.next().requestCode)) {
+                it.remove();
+                break;
             }
         }
 
@@ -293,7 +330,7 @@ final class RegRecordManager {
         records.add(r);
 
         writeRecords(ctx, records);
-        Log.i(TAG, "注册记录已覆盖: deviceId=" + deviceId + ", id=" + r.id
+        Log.i(TAG, "注册记录已覆盖(按安装码): deviceId=" + deviceId + ", id=" + r.id
                 + ", pkg=" + r.packageName);
     }
 
@@ -335,12 +372,14 @@ final class RegRecordManager {
         return queryHistoryByDeviceId(ctx, deviceId);
     }
 
-    /** 按 deviceId 查询所有历史记录。 */
+    /** 按 deviceId 查询所有历史记录（按时间倒序，最新在前）。 */
     static List<Record> queryHistoryByDeviceId(Context ctx, String deviceId) {
         List<Record> result = new ArrayList<>();
         for (Record r : readRecords(ctx)) {
             if (deviceId.equals(r.deviceId)) result.add(r);
         }
+        // 按 id 降序（最新在前）
+        result.sort((a, b) -> Long.compare(b.id, a.id));
         return result;
     }
 
@@ -351,7 +390,7 @@ final class RegRecordManager {
     @Nullable
     static Record queryLatestByRequestCode(Context ctx, String ungroupedRequestCode) {
         List<Record> history = queryHistoryByRequestCode(ctx, ungroupedRequestCode);
-        return history.isEmpty() ? null : history.get(history.size() - 1);
+        return history.isEmpty() ? null : history.get(0);
     }
 
     // ---- 删除 ----
@@ -406,16 +445,15 @@ final class RegRecordManager {
         StringBuilder sb = new StringBuilder();
         sb.append("共 ").append(history.size()).append(" 次注册\n");
         sb.append("设备ID: ").append(history.get(0).deviceId).append("\n");
-        String pkg = history.get(0).packageName;
-        if (pkg != null && !pkg.isEmpty()) {
-            sb.append("包名: ").append(pkg).append("\n");
-        }
         sb.append("——————————————\n");
         for (int i = 0; i < history.size(); i++) {
             Record r = history.get(i);
             if (i > 0) sb.append("——————————————\n");
             sb.append("第 ").append(i + 1).append(" 次注册\n");
             sb.append("时间: ").append(r.regAt).append("\n");
+            if (r.packageName != null && !r.packageName.isEmpty()) {
+                sb.append("包名: ").append(r.packageName).append("\n");
+            }
             sb.append("时长: ").append(r.validDays == 0 ? "永久" : r.validDays + " 天").append("\n");
             sb.append("到期: ").append(r.expiryDate).append("\n");
             if (showActivationCodes) {
@@ -451,7 +489,7 @@ final class RegRecordManager {
         return ids.size();
     }
 
-    /** 按 deviceId 分组返回所有设备的注册记录（用于设备总览视图）。 */
+    /** 按 deviceId 分组返回所有设备的注册记录（按最新记录时间降序排列）。 */
     static List<DeviceGroup> getDeviceGroups(Context ctx) {
         List<Record> all = readRecords(ctx);
         java.util.LinkedHashMap<String, List<Record>> map = new java.util.LinkedHashMap<>();
@@ -465,9 +503,93 @@ final class RegRecordManager {
         }
         List<DeviceGroup> groups = new ArrayList<>();
         for (java.util.Map.Entry<String, List<Record>> e : map.entrySet()) {
-            groups.add(new DeviceGroup(e.getKey(), e.getValue()));
+            List<Record> recs = e.getValue();
+            // 组内按 id 降序（最新在前）
+            recs.sort((a, b) -> Long.compare(b.id, a.id));
+            groups.add(new DeviceGroup(e.getKey(), recs));
         }
+        // 设备组按最新记录时间降序排列
+        groups.sort((a, b) -> Long.compare(b.records.get(0).id, a.records.get(0).id));
         return groups;
+    }
+
+    /** 按 deviceId 获取单个设备的二层分组信息，返回空列表表示该设备无记录。 */
+    static List<DevicePackageGroup> getDevicePackageGroupsByDeviceId(Context ctx, String deviceId) {
+        if (deviceId == null || deviceId.isEmpty()) return new ArrayList<>();
+        List<Record> records = queryHistoryByDeviceId(ctx, deviceId);
+        if (records.isEmpty()) return new ArrayList<>();
+
+        // 按包名分组
+        java.util.LinkedHashMap<String, List<Record>> pkgMap = new java.util.LinkedHashMap<>();
+        for (Record r : records) {
+            String pkg = (r.packageName != null && !r.packageName.isEmpty()) ? r.packageName : "(未指定)";
+            List<Record> list = pkgMap.get(pkg);
+            if (list == null) {
+                list = new ArrayList<>();
+                pkgMap.put(pkg, list);
+            }
+            list.add(r);
+        }
+
+        List<PackageGroup> pkgGroups = new ArrayList<>();
+        for (java.util.Map.Entry<String, List<Record>> e : pkgMap.entrySet()) {
+            e.getValue().sort((a, b) -> Long.compare(b.id, a.id));
+            pkgGroups.add(new PackageGroup(e.getKey(), e.getValue()));
+        }
+        pkgGroups.sort((a, b) -> Long.compare(b.records.get(0).id, a.records.get(0).id));
+
+        List<DevicePackageGroup> result = new ArrayList<>();
+        result.add(new DevicePackageGroup(deviceId, pkgGroups));
+        return result;
+    }
+
+    /** 按 deviceId → packageName 二层分组，所有记录按时间降序。 */
+    static List<DevicePackageGroup> getDevicePackageGroups(Context ctx) {
+        List<Record> all = readRecords(ctx);
+
+        // 第一层: 按 deviceId 分组
+        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, List<Record>>> devMap = new java.util.LinkedHashMap<>();
+        for (Record r : all) {
+            java.util.LinkedHashMap<String, List<Record>> pkgMap = devMap.get(r.deviceId);
+            if (pkgMap == null) {
+                pkgMap = new java.util.LinkedHashMap<>();
+                devMap.put(r.deviceId, pkgMap);
+            }
+            String pkg = (r.packageName != null && !r.packageName.isEmpty()) ? r.packageName : "(未指定)";
+            List<Record> list = pkgMap.get(pkg);
+            if (list == null) {
+                list = new ArrayList<>();
+                pkgMap.put(pkg, list);
+            }
+            list.add(r);
+        }
+
+        // 构建二层分组结果
+        List<DevicePackageGroup> result = new ArrayList<>();
+        for (java.util.Map.Entry<String, java.util.LinkedHashMap<String, List<Record>>> devEntry : devMap.entrySet()) {
+            String deviceId = devEntry.getKey();
+            java.util.LinkedHashMap<String, List<Record>> pkgMap = devEntry.getValue();
+
+            List<PackageGroup> pkgGroups = new ArrayList<>();
+            for (java.util.Map.Entry<String, List<Record>> pkgEntry : pkgMap.entrySet()) {
+                List<Record> recs = pkgEntry.getValue();
+                // 包内按 id 降序（最新在前）
+                recs.sort((a, b) -> Long.compare(b.id, a.id));
+                pkgGroups.add(new PackageGroup(pkgEntry.getKey(), recs));
+            }
+
+            // 包组按最新记录时间降序排列
+            pkgGroups.sort((a, b) -> Long.compare(b.records.get(0).id, a.records.get(0).id));
+
+            result.add(new DevicePackageGroup(deviceId, pkgGroups));
+        }
+
+        // 设备组按最新记录时间降序排列
+        result.sort((a, b) -> Long.compare(
+                b.packageGroups.get(0).records.get(0).id,
+                a.packageGroups.get(0).records.get(0).id));
+
+        return result;
     }
 
     // ==================== I/O ====================

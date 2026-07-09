@@ -71,26 +71,12 @@
             tools:ignore="HardcodedText"
             tools:text="ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ01-2345" />
 
-        <LinearLayout
+        <Button
+            android:id="@+id/reggate_btn_copy_code"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="4dp">
-
-            <Button
-                android:id="@+id/reggate_btn_copy_code"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/reggate_copy_request" />
-
-            <Button
-                android:id="@+id/reggate_btn_regenerate"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/reggate_regenerate" />
-        </LinearLayout>
+            android:layout_marginTop="4dp"
+            android:text="@string/reggate_copy_request" />
 
         <TextView
             android:layout_width="match_parent"

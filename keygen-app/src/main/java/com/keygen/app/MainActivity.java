@@ -10,9 +10,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
-import android.text.Editable;
 import android.text.TextUtils;
-import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -29,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.PrivateKey;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -53,16 +52,11 @@ public class MainActivity extends AppCompatActivity {
     private Button btnCopyPub;
     private Button btnViewRecords;
     private Button btnExportRecords;
-    private Button btnQueryDevice;
     private Button btnStorageSettings;
     private TextView tvRecordCount;
     private TextView tvStoragePath;
-    private TextView tvQueryResult;
     private LinearLayout llDeviceOverview;
     private TextView tvDeviceOverviewSummary;
-
-    private List<RegRecordManager.Record> lastQueryHistory;
-    private String lastQueryDeviceId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -101,8 +95,7 @@ public class MainActivity extends AppCompatActivity {
                 CharSequence text = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
                 if (text != null) {
                     etRequestCode.setText(text);
-                    // 粘贴后自动查询展示完整记录
-                    doQuery();
+                    refreshDeviceOverview();
                 }
             }
         });
@@ -114,31 +107,6 @@ public class MainActivity extends AppCompatActivity {
             if (TextUtils.isEmpty(code)) return;
             copyToClipboard("activation_code", code);
             toast("激活码已复制");
-        });
-
-        // 安装码查询
-        btnQueryDevice = findViewById(R.id.btn_query_device);
-        tvQueryResult = findViewById(R.id.tv_query_result);
-        btnQueryDevice.setOnClickListener(v -> doQuery());
-
-        // 查询结果可点击查看详情
-        tvQueryResult.setOnClickListener(v -> {
-            if (lastQueryHistory != null && !lastQueryHistory.isEmpty()) {
-                showHistoryDetailDialog(lastQueryHistory);
-            }
-        });
-
-        // 安装码输入变化时自动清理查询结果
-        etRequestCode.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {
-                tvQueryResult.setText("");
-                tvQueryResult.setVisibility(View.GONE);
-                tvQueryResult.setClickable(false);
-                lastQueryHistory = null;
-                lastQueryDeviceId = null;
-            }
-            @Override public void afterTextChanged(Editable s) {}
         });
 
         // 存储路径设置
@@ -174,10 +142,6 @@ public class MainActivity extends AppCompatActivity {
         refreshRecordCount();
         refreshStoragePath();
         refreshDeviceOverview();
-        // 如果之前查询过，刷新查询结果
-        if (lastQueryDeviceId != null) {
-            refreshQueryDisplay();
-        }
     }
 
     // ==================== 存储路径 ====================
@@ -215,90 +179,6 @@ public class MainActivity extends AppCompatActivity {
                 | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, REQ_PICK_STORAGE_DIR);
-    }
-
-    // ==================== 查询设备（立即显示历史） ====================
-
-    private void doQuery() {
-        String requestCode = Base32.ungroup(etRequestCode.getText().toString());
-        if (TextUtils.isEmpty(requestCode)) {
-            toast("请先输入安装码");
-            return;
-        }
-
-        String deviceId = RegRecordManager.extractDeviceIdHex(requestCode);
-        if (deviceId == null) {
-            tvQueryResult.setText("安装码格式错误");
-            tvQueryResult.setTextColor(0xFFE53935);
-            tvQueryResult.setVisibility(View.VISIBLE);
-            tvQueryResult.setClickable(false);
-            lastQueryHistory = null;
-            lastQueryDeviceId = null;
-            return;
-        }
-
-        lastQueryDeviceId = deviceId;
-        refreshQueryDisplay();
-    }
-
-    /** 刷新查询结果显示（从存储器重新读取）。 */
-    private void refreshQueryDisplay() {
-        if (lastQueryDeviceId == null) return;
-
-        lastQueryHistory = RegRecordManager.queryHistoryByDeviceId(this, lastQueryDeviceId);
-
-        if (lastQueryHistory == null || lastQueryHistory.isEmpty()) {
-            tvQueryResult.setText("此设备首次注册 (" + lastQueryDeviceId + ")");
-            tvQueryResult.setTextColor(0xFF388E3C);
-            tvQueryResult.setVisibility(View.VISIBLE);
-            tvQueryResult.setClickable(false);
-        } else {
-            RegRecordManager.Record latest = lastQueryHistory.get(lastQueryHistory.size() - 1);
-            String pkgInfo = (latest.packageName != null && !latest.packageName.isEmpty())
-                    ? " · " + latest.packageName : "";
-            tvQueryResult.setText("已注册 " + lastQueryHistory.size() + " 次"
-                    + pkgInfo
-                    + " · 到期: " + latest.expiryDate
-                    + " · 末次: " + latest.regAt
-                    + "\n(点击查看完整历史)");
-            tvQueryResult.setTextColor(0xFF1976D2);
-            tvQueryResult.setVisibility(View.VISIBLE);
-            tvQueryResult.setClickable(true);
-        }
-    }
-
-    /** 弹窗展示该设备所有历史注册记录。 */
-    private void showHistoryDetailDialog(List<RegRecordManager.Record> history) {
-        String text = RegRecordManager.formatHistory(history);
-        RegRecordManager.Record first = history.get(0);
-        String title = "注册历史 · " + first.deviceId;
-        if (first.packageName != null && !first.packageName.isEmpty()) {
-            title += " · " + first.packageName;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage(text)
-                .setPositiveButton("关闭", null)
-                .setNeutralButton("删除此设备全部记录", (d, w) -> {
-                    new AlertDialog.Builder(this)
-                            .setTitle("确认删除")
-                            .setMessage("确定删除设备 " + history.get(0).deviceId + " 的全部 "
-                                    + history.size() + " 条注册记录？")
-                            .setPositiveButton("确认删除", (dd, ww) -> {
-                                RegRecordManager.deleteByDeviceId(this, history.get(0).deviceId);
-                                lastQueryDeviceId = null;
-                                lastQueryHistory = null;
-                                tvQueryResult.setText("已删除 · 此设备无记录");
-                                tvQueryResult.setTextColor(0xFFE53935);
-                                tvQueryResult.setClickable(false);
-                                refreshRecordCount();
-                                refreshDeviceOverview();
-                                toast("已删除");
-                            })
-                            .setNegativeButton("取消", null)
-                            .show();
-                })
-                .show();
     }
 
     // ==================== 生成 ====================
@@ -339,49 +219,42 @@ public class MainActivity extends AppCompatActivity {
             String extracted = RegRecordManager.extractPackageNameFromRequest(requestCode);
             pkg = (extracted != null) ? extracted : "";
 
-            // 检查同激活码是否已有记录
-            RegRecordManager.Record existing = RegRecordManager.findByActivationCode(this, code);
+            // 按安装码查重：同一安装码改变时长=覆盖旧记录，算一次注册
+            RegRecordManager.Record existing = RegRecordManager.findByRequestCode(this, requestCode);
             if (existing != null) {
-                // 重复激活码 → 弹窗提示，确认后覆盖
+                // 同一安装码 → 弹窗提示，确认后覆盖
                 String deviceInfo = (existing.packageName != null && !existing.packageName.isEmpty())
                         ? existing.deviceId + " · " + existing.packageName
                         : existing.deviceId;
+                String oldDur = existing.validDays == 0 ? "永久" : existing.validDays + "天";
+                String newDur = validDays == 0 ? "永久" : validDays + "天";
                 new AlertDialog.Builder(this)
-                        .setTitle("重复激活码")
-                        .setMessage("此激活码已有注册记录，是否覆盖重新记录？\n\n"
+                        .setTitle("安装码已有记录")
+                        .setMessage("该安装码已有一条记录，更新时长将覆盖旧记录。\n\n"
                                 + "设备: " + deviceInfo + "\n"
-                                + "原记录时间: " + existing.regAt + "\n"
-                                + "原到期: " + existing.expiryDate)
-                        .setPositiveButton("重新记录", (d, w) -> {
-                            RegRecordManager.upsertByActivationCode(
+                                + "原时长: " + oldDur + " → 新时长: " + newDur + "\n"
+                                + "原到期: " + existing.expiryDate + "\n"
+                                + "原时间: " + existing.regAt)
+                        .setPositiveButton("更新记录", (d, w) -> {
+                            RegRecordManager.upsertByRequestCode(
                                     this, requestCode, validDays, code, pkg);
                             refreshRecordCount();
                             refreshDeviceOverview();
-                            refreshQueryAfterGenerate(requestCode);
-                            toast("已覆盖记录");
+                            toast("记录已更新");
                         })
                         .setNegativeButton("取消", null)
                         .show();
             } else {
-                // 新激活码 → 追加新记录
+                // 新安装码 → 追加记录
                 RegRecordManager.saveRecord(this, requestCode, validDays, code, pkg);
                 refreshRecordCount();
                 refreshDeviceOverview();
-                refreshQueryAfterGenerate(requestCode);
                 toast("生成成功，已追加记录");
             }
         } catch (IllegalArgumentException e) {
             toast("安装码格式错误");
         } catch (Exception e) {
             toast("生成失败: " + e.getMessage());
-        }
-    }
-
-    /** 生成激活码后刷新查询结果（如果当前安装码对应同设备）。 */
-    private void refreshQueryAfterGenerate(String requestCode) {
-        String deviceId = RegRecordManager.extractDeviceIdHex(requestCode);
-        if (deviceId != null && deviceId.equals(lastQueryDeviceId)) {
-            refreshQueryDisplay();
         }
     }
 
@@ -486,30 +359,39 @@ public class MainActivity extends AppCompatActivity {
     // ==================== 设备总览 ====================
 
     private void refreshDeviceOverview() {
-        List<RegRecordManager.DeviceGroup> groups = RegRecordManager.getDeviceGroups(this);
         llDeviceOverview.removeAllViews();
 
+        // 从当前安装码中提取设备 ID
+        String requestCode = Base32.ungroup(etRequestCode.getText().toString());
+        String currentDeviceId = null;
+        if (!TextUtils.isEmpty(requestCode)) {
+            currentDeviceId = RegRecordManager.extractDeviceIdHex(requestCode);
+        }
+
+        if (currentDeviceId == null) {
+            tvDeviceOverviewSummary.setVisibility(View.GONE);
+            return;
+        }
+
+        // 只获取当前设备的分组信息
+        List<RegRecordManager.DevicePackageGroup> groups = RegRecordManager.getDevicePackageGroupsByDeviceId(this, currentDeviceId);
         if (groups.isEmpty()) {
             tvDeviceOverviewSummary.setVisibility(View.GONE);
             return;
         }
 
-        int totalPkgs = 0;
-        int totalRecords = 0;
-        for (RegRecordManager.DeviceGroup g : groups) {
-            totalPkgs += g.getPackageCount();
-            totalRecords += g.records.size();
-        }
-        tvDeviceOverviewSummary.setText(groups.size() + " 个设备 · " + totalPkgs + " 个包 · 共 " + totalRecords + " 条记录");
+        RegRecordManager.DevicePackageGroup group = groups.get(0);
+        int totalRecords = group.getTotalRecordCount();
+        int totalPkgs = group.packageGroups.size();
+        tvDeviceOverviewSummary.setText(totalPkgs + " 个包 · 共 " + totalRecords + " 条记录");
         tvDeviceOverviewSummary.setVisibility(View.VISIBLE);
 
-        for (RegRecordManager.DeviceGroup group : groups) {
-            View card = buildDeviceCard(group);
-            llDeviceOverview.addView(card);
-        }
+        View card = buildDeviceCard(group);
+        llDeviceOverview.addView(card);
     }
 
-    private View buildDeviceCard(RegRecordManager.DeviceGroup group) {
+    /** 第一层: 设备卡片 */
+    private View buildDeviceCard(RegRecordManager.DevicePackageGroup group) {
         // 卡片容器
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -522,7 +404,7 @@ public class MainActivity extends AppCompatActivity {
         card.setClickable(true);
         card.setFocusable(true);
 
-        // 设备头部行: deviceId + 包数 + 展开箭头
+        // 设备头部行: deviceId + 包数记录数 + 展开箭头
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -537,7 +419,7 @@ public class MainActivity extends AppCompatActivity {
         tvDeviceId.setLayoutParams(devParams);
 
         TextView tvPkgCount = new TextView(this);
-        tvPkgCount.setText(group.getPackageCount() + " 个包");
+        tvPkgCount.setText(group.packageGroups.size() + " 个包 · " + group.getTotalRecordCount() + " 条");
         tvPkgCount.setTextSize(11);
         tvPkgCount.setTextColor(0xFF7B1FA2);
         tvPkgCount.setPadding(dp(8), 0, dp(4), 0);
@@ -552,16 +434,22 @@ public class MainActivity extends AppCompatActivity {
         header.addView(tvArrow);
         card.addView(header);
 
-        // 包详情容器（默认折叠）
+        // 包详情容器（默认折叠）: 第二层按包名展示
         final LinearLayout pkgContainer = new LinearLayout(this);
         pkgContainer.setOrientation(LinearLayout.VERTICAL);
         pkgContainer.setVisibility(View.GONE);
         pkgContainer.setPadding(dp(8), dp(4), 0, 0);
 
-        List<String> pkgNames = group.getPackageNames();
-        for (String pkgName : pkgNames) {
-            RegRecordManager.Record latest = group.getLatestByPackage(pkgName);
-            pkgContainer.addView(buildPkgRow(pkgName, latest));
+        for (int pi = 0; pi < group.packageGroups.size(); pi++) {
+            if (pi > 0) {
+                View pkgDiv = new View(this);
+                pkgDiv.setLayoutParams(new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+                pkgDiv.setBackgroundColor(0xFFE8E8E8);
+                pkgContainer.addView(pkgDiv);
+            }
+            RegRecordManager.PackageGroup pg = group.packageGroups.get(pi);
+            pkgContainer.addView(buildPkgSection(pg));
         }
 
         // 按钮行
@@ -612,67 +500,96 @@ public class MainActivity extends AppCompatActivity {
         return card;
     }
 
-    private View buildPkgRow(String pkgName, @Nullable RegRecordManager.Record record) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(3), 0, dp(3));
+    /** 第二层: 包名分组，展示该包最新记录摘要 */
+    private View buildPkgSection(RegRecordManager.PackageGroup pkgGroup) {
+        LinearLayout section = new LinearLayout(this);
+        section.setOrientation(LinearLayout.VERTICAL);
+        section.setPadding(dp(4), dp(4), 0, dp(2));
 
-        TextView tvPkg = new TextView(this);
-        tvPkg.setText(pkgName);
-        tvPkg.setTextSize(11);
-        tvPkg.setTextColor(0xFF555555);
-        tvPkg.setTypeface(Typeface.MONOSPACE);
-        LinearLayout.LayoutParams pkgParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        tvPkg.setLayoutParams(pkgParams);
+        // 包名行
+        LinearLayout pkgRow = new LinearLayout(this);
+        pkgRow.setOrientation(LinearLayout.HORIZONTAL);
+        pkgRow.setGravity(Gravity.CENTER_VERTICAL);
+        pkgRow.setPadding(dp(4), dp(2), 0, dp(2));
 
-        TextView tvInfo = new TextView(this);
-        if (record != null) {
-            String dur = record.validDays == 0 ? "永久" : record.validDays + "天";
-            tvInfo.setText(dur + " · 到期 " + record.expiryDate);
-            tvInfo.setTextColor(0xFF388E3C);
-        } else {
-            tvInfo.setText("无记录");
-            tvInfo.setTextColor(0xFF999999);
-        }
-        tvInfo.setTextSize(10);
+        View pkgDot = new View(this);
+        pkgDot.setLayoutParams(new LinearLayout.LayoutParams(dp(8), dp(8)));
+        pkgDot.setBackgroundColor(0xFF1976D2);
+        pkgRow.addView(pkgDot);
 
-        row.addView(tvPkg);
-        row.addView(tvInfo);
-        return row;
+        TextView tvPkgName = new TextView(this);
+        tvPkgName.setText("  " + pkgGroup.packageName);
+        tvPkgName.setTextSize(11);
+        tvPkgName.setTextColor(0xFF555555);
+        tvPkgName.setTypeface(Typeface.MONOSPACE);
+
+        TextView tvPkgCount = new TextView(this);
+        tvPkgCount.setText(" (" + pkgGroup.records.size() + " 次)");
+        tvPkgCount.setTextSize(10);
+        tvPkgCount.setTextColor(0xFF888888);
+
+        pkgRow.addView(tvPkgName);
+        pkgRow.addView(tvPkgCount);
+
+        // 最新记录摘要
+        RegRecordManager.Record latest = pkgGroup.records.get(0);
+        TextView tvSummary = new TextView(this);
+        String dur = latest.validDays == 0 ? "永久" : latest.validDays + "天";
+        tvSummary.setText(dur + " · 到期 " + latest.expiryDate + " · " + latest.regAt);
+        tvSummary.setTextSize(10);
+        tvSummary.setTextColor(0xFF388E3C);
+        tvSummary.setPadding(dp(16), dp(1), 0, dp(2));
+
+        section.addView(pkgRow);
+        section.addView(tvSummary);
+
+        return section;
     }
 
-    private void showDeviceDetail(RegRecordManager.DeviceGroup group) {
-        List<RegRecordManager.Record> history = group.records;
-        String text = RegRecordManager.formatHistory(history, false);
+    private void showDeviceDetail(RegRecordManager.DevicePackageGroup group) {
+        // 汇总所有记录为历史列表
+        List<RegRecordManager.Record> allRecords = new ArrayList<>();
+        for (RegRecordManager.PackageGroup pg : group.packageGroups) {
+            allRecords.addAll(pg.records);
+        }
+        allRecords.sort((a, b) -> Long.compare(b.id, a.id));
+
+        String text = RegRecordManager.formatHistory(allRecords, false);
         final boolean[] showAct = {false};
 
-        new AlertDialog.Builder(this)
+        android.app.AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("设备 " + group.deviceId)
                 .setMessage(text)
                 .setPositiveButton("显示激活码", null)
                 .setNeutralButton("关闭", null)
                 .setNegativeButton("删除全部", (d, w) -> confirmDeleteDeviceOverview(group))
-                .show();
+                .create();
+
+        dialog.setOnShowListener(d -> {
+            android.widget.Button btnToggle = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            btnToggle.setOnClickListener(v -> {
+                showAct[0] = !showAct[0];
+                String newText = RegRecordManager.formatHistory(allRecords, showAct[0]);
+                android.widget.TextView msgTv = (android.widget.TextView) dialog.findViewById(android.R.id.message);
+                if (msgTv != null) msgTv.setText(newText);
+                btnToggle.setText(showAct[0] ? "隐藏激活码" : "显示激活码");
+            });
+        });
+
+        dialog.show();
     }
 
-    private void confirmDeleteDeviceOverview(RegRecordManager.DeviceGroup group) {
+    private void confirmDeleteDeviceOverview(RegRecordManager.DevicePackageGroup group) {
+        int total = group.getTotalRecordCount();
         new AlertDialog.Builder(this)
                 .setTitle("删除设备全部记录")
                 .setMessage("确定删除设备 " + group.deviceId + " 的全部 "
-                        + group.records.size() + " 条注册记录？\n\n"
-                        + group.getPackageCount() + " 个包的许可将全部失效。")
+                        + total + " 条注册记录？")
                 .setPositiveButton("全部删除", (d, w) -> {
                     RegRecordManager.deleteByDeviceId(this, group.deviceId);
                     refreshRecordCount();
                     refreshDeviceOverview();
-                    if (lastQueryDeviceId != null && lastQueryDeviceId.equals(group.deviceId)) {
-                        lastQueryDeviceId = null;
-                        lastQueryHistory = null;
-                        tvQueryResult.setText("");
-                        tvQueryResult.setVisibility(View.GONE);
-                    }
-                    toast("已删除 " + group.records.size() + " 条记录");
+                    toast("已删除 " + total + " 条记录");
                 })
                 .setNegativeButton("取消", null)
                 .show();
