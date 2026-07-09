@@ -43,9 +43,12 @@ public class TrialDialogActivity extends Activity {
 
         if (btnRegister != null) {
             btnRegister.setOnClickListener(v -> {
+                RegistrationManager mgr = new RegistrationManager(this);
                 Intent it = new Intent(this, RegistrationActivity.class);
                 it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
                 it.putExtra(RegistrationActivity.EXTRA_EXPIRED, false);
+                it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, mgr.isTimeTampered());
+                it.putExtra(RegistrationActivity.EXTRA_ANOMALY, mgr.isAnomaly());
                 it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, remainingDays);
                 it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
                 startActivityForResult(it, REQ_REGISTER);

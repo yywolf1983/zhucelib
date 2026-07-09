@@ -40,7 +40,7 @@ JAVA_MAX=21
 #   output_subpath 中 {TYPE} 会被替换为 debug/release
 #   registration-lib 的构建目录被重定向到 build/registration-lib/
 MODULES=(
-    "registration-lib|registration-lib|build/registration-lib/outputs/aar/registration-lib-{TYPE}.aar|lib"
+    "registration-lib|registration-lib|registration-lib/build/outputs/aar/registration-lib-{TYPE}.aar|lib"
     "keygen-app|keygen-app|build/outputs/apk/{TYPE}/keygen-app-{TYPE}.apk|"
     "demo-app|demo-app|build/outputs/apk/{TYPE}/demo-app-{TYPE}.apk|"
 )

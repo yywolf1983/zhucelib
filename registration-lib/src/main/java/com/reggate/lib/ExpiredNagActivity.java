@@ -53,9 +53,12 @@ public class ExpiredNagActivity extends Activity {
 
         if (btnActivate != null) {
             btnActivate.setOnClickListener(v -> {
+                RegistrationManager mgr = new RegistrationManager(this);
                 Intent it = new Intent(this, RegistrationActivity.class);
                 it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
                 it.putExtra(RegistrationActivity.EXTRA_EXPIRED, true);
+                it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, mgr.isTimeTampered());
+                it.putExtra(RegistrationActivity.EXTRA_ANOMALY, mgr.isAnomaly());
                 it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, 0);
                 it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, licenseRemaining);
                 startActivityForResult(it, REQ_REGISTER);

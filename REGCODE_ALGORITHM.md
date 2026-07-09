@@ -17,6 +17,8 @@
 | `nonce` | 8 字节 | 加密安全随机数 |
 | `validDays` | 2 字节 | 有效天数，大端序 uint16，0=永久 |
 | `issuedDay` | 4 字节 | 签发日期，大端序 uint32，自 1970-01-01 的天数 |
+| `xorKey` | 6 字节 | XOR 隐写密钥 = SHA-256(deviceId \|\| nonce) 前 6 字节 |
+| `keystream` | 262 字节 | 全量 XOR 密钥流 = SHA-256 CTR(deviceId \|\| nonce) |
 | `signature` | 256 字节 | RSA-2048 SHA256withRSA 签名 |
 
 ---
@@ -83,19 +85,30 @@ byte[] sig = signer.sign();  // 256 字节签名结果
 ### 第七步：构建激活码（注册机端）
 
 ```
-激活码原始数据(262字节) = validDays[2] || issuedDay[4] || signature[256]
-激活码字符串 = Crockford Base32 编码(原始数据)，按每组5字符用 "-" 分隔
+1. 构建明文载荷(262字节) = validDays[2] || issuedDay[4] || signature[256]
+2. 生成密钥流(262字节): keystream = SHA-256 CTR(deviceId || nonce)
+   - 块0: SHA-256(deviceId || nonce || 0x00000000)[0:32]
+   - 块1: SHA-256(deviceId || nonce || 0x00000001)[0:32]
+   - ... (共 ceil(262/32) = 9 块)
+3. 全量 XOR 置乱: scrambled[i] = payload[i] XOR keystream[i]
+4. 激活码字符串 = Crockford Base32 编码(scrambled)，按每组5字符用 "-" 分隔
 ```
+
+**全量隐写机制**：整个 262 字节载荷（validDays + issuedDay + 签名）全部用设备绑定的密钥流 XOR 置乱。结果不可区分于随机数据，无任何固定字段或结构特征。
+
+**签名消息不参与隐写**：签名覆盖的 26 字节消息（deviceId + nonce + validDays + issuedDay）保持原始明文，仅激活码的存储/传输格式被混淆。
 
 ### 第八步：验证激活码（客户端）
 
 ```
-1. 去除连字符 → Crockford Base32 解码 → 262 字节
-2. 解析: validDays = out[0..1], issuedDay = out[2..5], sig = out[6..261]
-3. 重建签名消息: deviceId[12] + nonce[8] + validDays[2] + issuedDay[4]
-4. SHA256withRSA 验签: 用内置公钥验证(签名消息, sig)
-5. 验签失败 → 激活码无效
-6. 验签成功 → 计算到期时间:
+1. 去除连字符 → Crockford Base32 解码 → 262 字节置乱数据
+2. 生成相同密钥流: keystream[262] = SHA-256 CTR(deviceId || nonce)
+3. 全量 XOR 解乱: payload[i] = scrambled[i] XOR keystream[i]
+4. 解乱后解析: validDays = payload[0:2], issuedDay = payload[2:6], sig = payload[6:262]
+5. 重建签名消息: deviceId[12] + nonce[8] + validDays[2] + issuedDay[4]
+6. SHA256withRSA 验签: 用内置公钥验证(签名消息, sig)
+7. 验签失败 → 激活码无效
+8. 验签成功 → 计算到期时间:
    - issuedMs = issuedDay × 86400000
    - expiryMs = (validDays == 0) ? 0 : (issuedDay + validDays) × 86400000
    - 0 = 永久有效
@@ -111,6 +124,7 @@ byte[] sig = signer.sign();  // 256 字节签名结果
 | 随机数 | SecureRandom | 生成 8 字节 nonce |
 | 编解码 | Crockford Base32 | 安装码/激活码人可读编码 |
 | 签名 | SHA256withRSA（RSA-2048） | 私钥签名、公钥验签 |
+| 隐写 | SHA-256 CTR 模式派生 262 字节密钥流，全量 XOR | 消除激活码全部固定结构，不可区分于随机 |
 | 公钥格式 | X.509 | Base64 公钥解析 |
 | 私钥格式 | PKCS#8 | PEM 文件私钥解析 |
 

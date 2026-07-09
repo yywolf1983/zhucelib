@@ -38,6 +38,7 @@ public class RegistrationActivity extends Activity {
     public static final String EXTRA_TRIAL_REMAINING_DAYS = "extra_trial_remaining_days";
     public static final String EXTRA_LICENSE_REMAINING_DAYS = "extra_license_remaining_days";
     public static final String EXTRA_TIME_TAMPERED = "extra_time_tampered";
+    public static final String EXTRA_ANOMALY = "extra_anomaly";
 
     private RegistrationManager manager;
 
@@ -78,6 +79,7 @@ public class RegistrationActivity extends Activity {
         String appName = getIntent().getStringExtra(EXTRA_APP_NAME);
         boolean expired = getIntent().getBooleanExtra(EXTRA_EXPIRED, false);
         boolean timeTampered = getIntent().getBooleanExtra(EXTRA_TIME_TAMPERED, false);
+        boolean anomaly = getIntent().getBooleanExtra(EXTRA_ANOMALY, false);
         int trialRemaining = getIntent().getIntExtra(EXTRA_TRIAL_REMAINING_DAYS, 0);
         int licenseRemaining = getIntent().getIntExtra(EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
 
@@ -108,7 +110,10 @@ public class RegistrationActivity extends Activity {
         showRequestCode();
         setupContactInfo();
 
-        if (timeTampered) {
+        if (anomaly) {
+            tvHint.setText(RegGateResources.getString(this, "reggate_hint_registration_anomaly"));
+            tvHint.setTextColor(0xFFE53935);
+        } else if (timeTampered) {
             tvHint.setText(RegGateResources.getString(this, "reggate_hint_time_tampered"));
             tvHint.setTextColor(0xFFE53935);
         } else if (expired) {

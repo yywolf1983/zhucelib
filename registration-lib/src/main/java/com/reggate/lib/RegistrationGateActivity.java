@@ -26,6 +26,12 @@ public class RegistrationGateActivity extends Activity {
 
         manager.ensureFirstLaunchRecorded();
 
+        // 异常状态下强制跳转注册/激活页面，忽略状态机
+        if (manager.isAnomaly()) {
+            startRegistrationActivity(true);
+            return;
+        }
+
         RegistrationManager.State state = manager.getCurrentState();
         switch (state) {
             case LICENSED:
@@ -67,7 +73,10 @@ public class RegistrationGateActivity extends Activity {
     }
 
     private void handleExpired() {
-        if (manager.getConfig().getExpireBehavior() == RegGateConfig.ExpireBehavior.NAG_ONLY) {
+        // 异常状态下强制跳转注册页面，忽略 NAG_ONLY 配置
+        if (manager.isAnomaly()) {
+            startRegistrationActivity(true);
+        } else if (manager.getConfig().getExpireBehavior() == RegGateConfig.ExpireBehavior.NAG_ONLY) {
             boolean licenseExpired = manager.getLicenseExpiryMs() != null;
             Intent it = new Intent(this, ExpiredNagActivity.class);
             it.putExtra(ExpiredNagActivity.EXTRA_APP_NAME, manager.getConfig().getAppName());
@@ -84,6 +93,7 @@ public class RegistrationGateActivity extends Activity {
         it.putExtra(RegistrationActivity.EXTRA_APP_NAME, manager.getConfig().getAppName());
         it.putExtra(RegistrationActivity.EXTRA_EXPIRED, expired);
         it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, manager.isTimeTampered());
+        it.putExtra(RegistrationActivity.EXTRA_ANOMALY, manager.isAnomaly());
         it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, manager.getTrialRemainingDays());
         it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, manager.getLicenseRemainingDays());
         startActivityForResult(it, REQ_REGISTER);

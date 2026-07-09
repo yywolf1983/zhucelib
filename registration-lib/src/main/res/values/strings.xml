@@ -20,6 +20,7 @@
     <string name="reggate_hint_license_expired">授权已到期,请重新激活</string>
     <string name="reggate_hint_expired">已到期,请激活后使用</string>
     <string name="reggate_hint_time_tampered">检测到注册异常，请重新注册</string>
+    <string name="reggate_hint_registration_anomaly">注册异常，请重新注册</string>
 
     <!-- 试用框 -->
     <string name="reggate_trial_title">%1$s - 试用版</string>

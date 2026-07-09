@@ -53,6 +53,7 @@ final class RegRecordManager {
     private static final String K_ID = "id";
     private static final String K_DEVICE_ID = "deviceId";
     private static final String K_REQUEST_CODE = "requestCode";
+    private static final String K_PACKAGE_NAME = "packageName";
     private static final String K_VALID_DAYS = "validDays";
     private static final String K_EXPIRY_DATE = "expiryDate";
     private static final String K_REG_AT = "regAt";
@@ -66,6 +67,7 @@ final class RegRecordManager {
         long id;             // 唯一 ID（时间戳）
         String deviceId;     // 设备 ID hex
         String requestCode;  // 安装码（未分组）
+        String packageName;  // 目标 App 包名
         int validDays;       // 购买天数，0=永久
         String expiryDate;   // 到期日
         String regAt;        // 注册时间
@@ -76,6 +78,9 @@ final class RegRecordManager {
             StringBuilder sb = new StringBuilder();
             sb.append("记录ID: ").append(id).append("\n");
             sb.append("设备ID: ").append(deviceId).append("\n");
+            if (packageName != null && !packageName.isEmpty()) {
+                sb.append("包名: ").append(packageName).append("\n");
+            }
             sb.append("注册时间: ").append(regAt).append("\n");
             sb.append("购买时长: ").append(validDays == 0 ? "永久" : validDays + " 天").append("\n");
             sb.append("到期: ").append(expiryDate).append("\n");
@@ -132,7 +137,7 @@ final class RegRecordManager {
         return uri != null ? "自定义: " + uri.getLastPathSegment() : "未知";
     }
 
-    // ==================== Device ID ====================
+    // ==================== Device ID & Package Name ====================
 
     @Nullable
     static String extractDeviceIdHex(String ungroupedRequestCode) {
@@ -144,12 +149,21 @@ final class RegRecordManager {
         return bytesToHex(deviceId);
     }
 
+    /**
+     * 从安装码中提取包名。无包名返回空字符串，解析失败返回 null。
+     */
+    @Nullable
+    static String extractPackageNameFromRequest(String ungroupedRequestCode) {
+        return KeygenUtils.extractPackageName(ungroupedRequestCode);
+    }
+
     // ==================== CRUD ====================
 
     /**
      * 追加一条新注册记录（每次都新建，不合并）。
      */
-    static void saveRecord(Context ctx, String rawRequestCode, int validDays, String activationCode) {
+    static void saveRecord(Context ctx, String rawRequestCode, int validDays,
+                           String activationCode, String packageName) {
         String deviceId = extractDeviceIdHex(rawRequestCode);
         if (deviceId == null) {
             Log.w(TAG, "无法解析安装码,跳过记录保存");
@@ -165,6 +179,7 @@ final class RegRecordManager {
         r.id = System.currentTimeMillis();
         r.deviceId = deviceId;
         r.requestCode = rawRequestCode;
+        r.packageName = (packageName != null) ? packageName : "";
         r.validDays = validDays;
         r.expiryDate = expiry;
         r.regAt = now;
@@ -172,7 +187,67 @@ final class RegRecordManager {
         records.add(r);
 
         writeRecords(ctx, records);
-        Log.i(TAG, "注册记录已追加: deviceId=" + deviceId + ", id=" + r.id);
+        Log.i(TAG, "注册记录已追加: deviceId=" + deviceId + ", id=" + r.id
+                + ", pkg=" + r.packageName);
+    }
+
+    // ---- 激活码查重 & 覆盖 ----
+
+    /**
+     * 按激活码查找已有记录。不存在返回 null。
+     */
+    @Nullable
+    static Record findByActivationCode(Context ctx, String activationCode) {
+        if (activationCode == null || activationCode.isEmpty()) return null;
+        for (Record r : readRecords(ctx)) {
+            if (activationCode.equals(r.activationCode)) return r;
+        }
+        return null;
+    }
+
+    /**
+     * 按激活码覆盖：删除旧记录（如存在），追加新记录。
+     * 保证同一激活码只有一条记录。
+     */
+    static void upsertByActivationCode(Context ctx, String rawRequestCode, int validDays,
+                                       String activationCode, String packageName) {
+        String deviceId = extractDeviceIdHex(rawRequestCode);
+        if (deviceId == null) {
+            Log.w(TAG, "无法解析安装码,跳过记录保存");
+            return;
+        }
+
+        List<Record> records = readRecords(ctx);
+
+        // 删除同激活码的旧记录
+        if (activationCode != null && !activationCode.isEmpty()) {
+            Iterator<Record> it = records.iterator();
+            while (it.hasNext()) {
+                if (activationCode.equals(it.next().activationCode)) {
+                    it.remove();
+                    break;
+                }
+            }
+        }
+
+        String now = SDF.format(new java.util.Date());
+        String expiry = validDays == 0 ? "永久"
+                : KeygenUtils.formatExpiry(validDays);
+
+        Record r = new Record();
+        r.id = System.currentTimeMillis();
+        r.deviceId = deviceId;
+        r.requestCode = rawRequestCode;
+        r.packageName = (packageName != null) ? packageName : "";
+        r.validDays = validDays;
+        r.expiryDate = expiry;
+        r.regAt = now;
+        r.activationCode = activationCode;
+        records.add(r);
+
+        writeRecords(ctx, records);
+        Log.i(TAG, "注册记录已覆盖: deviceId=" + deviceId + ", id=" + r.id
+                + ", pkg=" + r.packageName);
     }
 
     /** 读取所有注册记录。 */
@@ -189,6 +264,7 @@ final class RegRecordManager {
                 r.id = obj.optLong(K_ID, System.currentTimeMillis());
                 r.deviceId = obj.optString(K_DEVICE_ID, "");
                 r.requestCode = obj.optString(K_REQUEST_CODE, "");
+                r.packageName = obj.optString(K_PACKAGE_NAME, "");
                 r.validDays = obj.optInt(K_VALID_DAYS, 0);
                 r.expiryDate = obj.optString(K_EXPIRY_DATE, "");
                 r.regAt = obj.optString(K_REG_AT, "");
@@ -272,12 +348,21 @@ final class RegRecordManager {
 
     // ---- 统计 ----
 
-    /** 格式化多条历史记录为文本。 */
+    /** 格式化多条历史记录为文本（默认不显示激活码）。 */
     static String formatHistory(List<Record> history) {
+        return formatHistory(history, false);
+    }
+
+    /** 格式化多条历史记录为文本。 */
+    static String formatHistory(List<Record> history, boolean showActivationCodes) {
         if (history == null || history.isEmpty()) return "(暂无记录)";
         StringBuilder sb = new StringBuilder();
         sb.append("共 ").append(history.size()).append(" 次注册\n");
         sb.append("设备ID: ").append(history.get(0).deviceId).append("\n");
+        String pkg = history.get(0).packageName;
+        if (pkg != null && !pkg.isEmpty()) {
+            sb.append("包名: ").append(pkg).append("\n");
+        }
         sb.append("——————————————\n");
         for (int i = 0; i < history.size(); i++) {
             Record r = history.get(i);
@@ -286,7 +371,9 @@ final class RegRecordManager {
             sb.append("时间: ").append(r.regAt).append("\n");
             sb.append("时长: ").append(r.validDays == 0 ? "永久" : r.validDays + " 天").append("\n");
             sb.append("到期: ").append(r.expiryDate).append("\n");
-            sb.append("激活码: ").append(r.activationCode).append("\n");
+            if (showActivationCodes) {
+                sb.append("激活码: ").append(r.activationCode).append("\n");
+            }
         }
         return sb.toString();
     }
@@ -349,6 +436,7 @@ final class RegRecordManager {
                 obj.put(K_ID, r.id);
                 obj.put(K_DEVICE_ID, r.deviceId);
                 obj.put(K_REQUEST_CODE, r.requestCode);
+                obj.put(K_PACKAGE_NAME, r.packageName != null ? r.packageName : "");
                 obj.put(K_VALID_DAYS, r.validDays);
                 obj.put(K_EXPIRY_DATE, r.expiryDate);
                 obj.put(K_REG_AT, r.regAt);

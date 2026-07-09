@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.SystemClock;
 import android.util.Log;
 
+import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
 
 /**
@@ -125,6 +126,12 @@ public final class RegistrationManager {
             return;
         }
 
+        // 异常状态下强制跳转注册页面，忽略状态机
+        if (isAnomaly()) {
+            startRegistrationActivity(activity, true);
+            return;
+        }
+
         State state = getCurrentState();
         if (state == State.LICENSED || state == State.TRIALING) {
             ensureFirstLaunchRecorded();
@@ -133,7 +140,10 @@ public final class RegistrationManager {
         }
 
         if (state == State.EXPIRED) {
-            if (getEffectiveExpireBehavior() == RegGateConfig.ExpireBehavior.NAG_ONLY) {
+            // 异常状态下强制跳转注册页面，忽略 NAG_ONLY 配置
+            if (isAnomaly()) {
+                startRegistrationActivity(activity, true);
+            } else if (getEffectiveExpireBehavior() == RegGateConfig.ExpireBehavior.NAG_ONLY) {
                 startExpiredNagActivity(activity);
             } else {
                 startRegistrationActivity(activity, true);
@@ -165,10 +175,12 @@ public final class RegistrationManager {
 
     private void startRegistrationActivity(android.app.Activity activity, boolean expired) {
         boolean tampered = isTimeTampered();
+        boolean anomaly = isAnomaly();
         Intent it = new Intent(activity, RegistrationActivity.class);
         it.putExtra(RegistrationActivity.EXTRA_APP_NAME, config.getAppName());
         it.putExtra(RegistrationActivity.EXTRA_EXPIRED, expired);
         it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, tampered);
+        it.putExtra(RegistrationActivity.EXTRA_ANOMALY, anomaly);
         it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, getTrialRemainingDays());
         it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, getLicenseRemainingDays());
         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -214,25 +226,38 @@ public final class RegistrationManager {
             nonce = DeviceUtils.generateNonce();
             prefs.setPendingNonce(nonce);
         }
-        return buildRequestCode(deviceId, nonce);
+        return buildRequestCode(deviceId, nonce, app.getPackageName());
     }
 
     public String regenerateRequestCode() {
         byte[] nonce = DeviceUtils.generateNonce();
         prefs.setPendingNonce(nonce);
-        return buildRequestCode(deviceId, nonce);
+        return buildRequestCode(deviceId, nonce, app.getPackageName());
     }
 
-    private static String buildRequestCode(byte[] deviceId, byte[] nonce) {
-        byte[] data = new byte[deviceId.length + nonce.length];
-        System.arraycopy(deviceId, 0, data, 0, deviceId.length);
-        System.arraycopy(nonce, 0, data, deviceId.length, nonce.length);
+    /**
+     * 编码安装码: deviceId[12] || nonce[8] || pkgLen[2 BE] || packageName_utf8[pkgLen]
+     * 不含包名时 pkgLen=0(向后兼容旧格式 20 字节)。
+     */
+    private static String buildRequestCode(byte[] deviceId, byte[] nonce, String packageName) {
+        byte[] pkgBytes = (packageName != null && !packageName.isEmpty())
+                ? packageName.getBytes(StandardCharsets.UTF_8) : new byte[0];
+        int pkgLen = Math.min(pkgBytes.length, 65535);
+        int off = 0;
+        byte[] data = new byte[deviceId.length + nonce.length + 2 + pkgLen];
+        System.arraycopy(deviceId, 0, data, off, deviceId.length);
+        off += deviceId.length;
+        System.arraycopy(nonce, 0, data, off, nonce.length);
+        off += nonce.length;
+        data[off++] = (byte) (pkgLen >> 8);
+        data[off++] = (byte) pkgLen;
+        if (pkgLen > 0) System.arraycopy(pkgBytes, 0, data, off, pkgLen);
         return Base32.encode(data);
     }
 
     public static byte[] extractNonceFromRequestCode(String requestCode) {
         byte[] data = Base32.decode(requestCode);
-        if (data == null || data.length != CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
+        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
         byte[] nonce = new byte[CryptoUtils.NONCE_LEN];
         System.arraycopy(data, CryptoUtils.DEVICE_ID_LEN, nonce, 0, nonce.length);
         return nonce;
@@ -240,10 +265,27 @@ public final class RegistrationManager {
 
     public static byte[] extractDeviceIdFromRequestCode(String requestCode) {
         byte[] data = Base32.decode(requestCode);
-        if (data == null || data.length != CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
+        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) return null;
         byte[] id = new byte[CryptoUtils.DEVICE_ID_LEN];
         System.arraycopy(data, 0, id, 0, id.length);
         return id;
+    }
+
+    /**
+     * 从安装码中提取包名。无包名返回空字符串，解析失败返回 null。
+     */
+    @androidx.annotation.Nullable
+    public static String extractPackageNameFromRequestCode(String requestCode) {
+        byte[] data = Base32.decode(requestCode);
+        if (data == null || data.length < CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN + 2) {
+            // 旧格式安装码，无包名
+            return (data != null && data.length >= CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN) ? "" : null;
+        }
+        int off = CryptoUtils.DEVICE_ID_LEN + CryptoUtils.NONCE_LEN;
+        int pkgLen = ((data[off] & 0xFF) << 8) | (data[off + 1] & 0xFF);
+        if (pkgLen == 0) return "";
+        if (pkgLen < 0 || off + 2 + pkgLen > data.length) return null;
+        return new String(data, off + 2, pkgLen, StandardCharsets.UTF_8);
     }
 
     // ------------------ 激活码校验 ------------------
@@ -263,11 +305,34 @@ public final class RegistrationManager {
         }
         prefs.saveLicense(inputCode.trim(), nonce);
         prefs.setPendingNonce(null);
+        // 清除异常状态：重置时钟检测基准点，防止之前的时钟回拨标记阻断正常使用
+        updateClockCheckpoint();
         return VerifyResult.ok(lic);
     }
 
     public void revoke() {
         prefs.clearLicense();
+    }
+
+    // ------------------ 异常检测 ------------------
+
+    /**
+     * 检测许可数据是否损坏：已存储激活码但验签失败（可能被篡改或数据损坏）。
+     */
+    public boolean hasCorruptLicense() {
+        String code = prefs.getActivationCode();
+        byte[] nonce = prefs.getLicenseNonce();
+        if (code == null || nonce == null) return false;
+        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(code, publicKey, deviceId, nonce);
+        return lic == null;
+    }
+
+    /**
+     * 综合异常检测：时钟回拨、许可数据损坏等都视为注册异常。
+     * 异常状态下应强制跳转到注册页面，不应该放行到主界面。
+     */
+    public boolean isAnomaly() {
+        return isTimeTampered() || hasCorruptLicense();
     }
 
     // ------------------ 试用/到期信息 ------------------

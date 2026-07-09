@@ -93,7 +93,11 @@ public class MainActivity extends AppCompatActivity {
             if (cm.hasPrimaryClip() && cm.getPrimaryClip() != null
                     && cm.getPrimaryClip().getItemCount() > 0) {
                 CharSequence text = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
-                if (text != null) etRequestCode.setText(text);
+                if (text != null) {
+                    etRequestCode.setText(text);
+                    // 粘贴后自动查询展示完整记录
+                    doQuery();
+                }
             }
         });
 
@@ -241,7 +245,10 @@ public class MainActivity extends AppCompatActivity {
             tvQueryResult.setClickable(false);
         } else {
             RegRecordManager.Record latest = lastQueryHistory.get(lastQueryHistory.size() - 1);
+            String pkgInfo = (latest.packageName != null && !latest.packageName.isEmpty())
+                    ? " · " + latest.packageName : "";
             tvQueryResult.setText("已注册 " + lastQueryHistory.size() + " 次"
+                    + pkgInfo
                     + " · 到期: " + latest.expiryDate
                     + " · 末次: " + latest.regAt
                     + "\n(点击查看完整历史)");
@@ -254,8 +261,13 @@ public class MainActivity extends AppCompatActivity {
     /** 弹窗展示该设备所有历史注册记录。 */
     private void showHistoryDetailDialog(List<RegRecordManager.Record> history) {
         String text = RegRecordManager.formatHistory(history);
+        RegRecordManager.Record first = history.get(0);
+        String title = "注册历史 · " + first.deviceId;
+        if (first.packageName != null && !first.packageName.isEmpty()) {
+            title += " · " + first.packageName;
+        }
         new AlertDialog.Builder(this)
-                .setTitle("注册历史 · " + history.get(0).deviceId)
+                .setTitle(title)
                 .setMessage(text)
                 .setPositiveButton("关闭", null)
                 .setNeutralButton("删除此设备全部记录", (d, w) -> {
@@ -305,28 +317,59 @@ public class MainActivity extends AppCompatActivity {
         }
 
         try {
-            String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
+            final String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
 
             tvActivationCode.setText(code);
             tvValidDaysResult.setText("购买时长: " + (validDays == 0 ? "永久" : validDays + " 天"));
             tvExpiryResult.setText("到期: " + KeygenUtils.formatExpiry(validDays));
             btnCopyActivation.setEnabled(true);
 
-            // 追加一条独立注册记录（同设备多次注册不合并）
-            RegRecordManager.saveRecord(this, requestCode, validDays, code);
-            refreshRecordCount();
+            // 提取包名
+            final String pkg;
+            String extracted = RegRecordManager.extractPackageNameFromRequest(requestCode);
+            pkg = (extracted != null) ? extracted : "";
 
-            // 更新查询结果（如果当前安装码对应同设备）
-            String deviceId = RegRecordManager.extractDeviceIdHex(requestCode);
-            if (deviceId != null && deviceId.equals(lastQueryDeviceId)) {
-                refreshQueryDisplay();
+            // 检查同激活码是否已有记录
+            RegRecordManager.Record existing = RegRecordManager.findByActivationCode(this, code);
+            if (existing != null) {
+                // 重复激活码 → 弹窗提示，确认后覆盖
+                String deviceInfo = (existing.packageName != null && !existing.packageName.isEmpty())
+                        ? existing.deviceId + " · " + existing.packageName
+                        : existing.deviceId;
+                new AlertDialog.Builder(this)
+                        .setTitle("重复激活码")
+                        .setMessage("此激活码已有注册记录，是否覆盖重新记录？\n\n"
+                                + "设备: " + deviceInfo + "\n"
+                                + "原记录时间: " + existing.regAt + "\n"
+                                + "原到期: " + existing.expiryDate)
+                        .setPositiveButton("重新记录", (d, w) -> {
+                            RegRecordManager.upsertByActivationCode(
+                                    this, requestCode, validDays, code, pkg);
+                            refreshRecordCount();
+                            refreshQueryAfterGenerate(requestCode);
+                            toast("已覆盖记录");
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
+            } else {
+                // 新激活码 → 追加新记录
+                RegRecordManager.saveRecord(this, requestCode, validDays, code, pkg);
+                refreshRecordCount();
+                refreshQueryAfterGenerate(requestCode);
+                toast("生成成功，已追加记录");
             }
-
-            toast("生成成功，已追加记录");
         } catch (IllegalArgumentException e) {
             toast("安装码格式错误");
         } catch (Exception e) {
             toast("生成失败: " + e.getMessage());
+        }
+    }
+
+    /** 生成激活码后刷新查询结果（如果当前安装码对应同设备）。 */
+    private void refreshQueryAfterGenerate(String requestCode) {
+        String deviceId = RegRecordManager.extractDeviceIdHex(requestCode);
+        if (deviceId != null && deviceId.equals(lastQueryDeviceId)) {
+            refreshQueryDisplay();
         }
     }
 

@@ -1,12 +1,18 @@
 package com.keygen.app;
 
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
@@ -143,13 +149,123 @@ public class RecordsActivity extends AppCompatActivity {
     }
 
     private void showDetail(RegRecordManager.Record r) {
-        new AlertDialog.Builder(this)
-                .setTitle("注册详情")
-                .setMessage(r.toString())
-                .setPositiveButton("关闭", null)
-                .setNegativeButton("删除此条", (d, w) -> confirmDeleteSingle(r))
-                .setNeutralButton("删除此设备全部", (d, w) -> confirmDeleteDevice(r))
-                .show();
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_record_detail);
+
+        // 设置对话框尺寸为屏幕的 4/5
+        Window window = dialog.getWindow();
+        if (window != null) {
+            WindowManager.LayoutParams wlp = window.getAttributes();
+            wlp.width = (int) (getResources().getDisplayMetrics().widthPixels * 0.8);
+            wlp.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.8);
+            wlp.gravity = Gravity.CENTER;
+            window.setAttributes(wlp);
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+        dialog.setCancelable(true);
+        dialog.setCanceledOnTouchOutside(true);
+
+        // 字段
+        TextView tvRecordId = dialog.findViewById(R.id.dialog_detail_record_id);
+        TextView tvDeviceId = dialog.findViewById(R.id.dialog_detail_device_id);
+        View pkgRow = dialog.findViewById(R.id.dialog_detail_pkg_row);
+        TextView tvPackage = dialog.findViewById(R.id.dialog_detail_package);
+        TextView tvRegTime = dialog.findViewById(R.id.dialog_detail_reg_time);
+        TextView tvValidDays = dialog.findViewById(R.id.dialog_detail_valid_days);
+        TextView tvExpiry = dialog.findViewById(R.id.dialog_detail_expiry);
+        TextView tvActCode = dialog.findViewById(R.id.dialog_detail_activation_code);
+
+        tvRecordId.setText(String.valueOf(r.id));
+        tvDeviceId.setText(r.deviceId);
+        if (r.packageName != null && !r.packageName.isEmpty()) {
+            tvPackage.setText(r.packageName);
+            pkgRow.setVisibility(View.VISIBLE);
+        } else {
+            pkgRow.setVisibility(View.GONE);
+        }
+        tvRegTime.setText(r.regAt);
+        tvValidDays.setText(r.validDays == 0 ? "永久" : r.validDays + " 天");
+        tvExpiry.setText(r.expiryDate);
+        tvActCode.setText(r.activationCode);
+
+        // 激活码折叠/展开
+        View actToggle = dialog.findViewById(R.id.dialog_detail_act_toggle);
+        TextView actToggleLabel = (TextView) ((ViewGroup) actToggle).getChildAt(0);
+        actToggle.setOnClickListener(v -> {
+            if (tvActCode.getVisibility() == View.GONE) {
+                tvActCode.setVisibility(View.VISIBLE);
+                actToggleLabel.setText("激活码 ▼");
+            } else {
+                tvActCode.setVisibility(View.GONE);
+                actToggleLabel.setText("激活码 ▶");
+            }
+        });
+
+        // 设备ID点击 → 展示该设备所有注册记录
+        tvDeviceId.setOnClickListener(v -> {
+            dialog.dismiss();
+            showDeviceHistory(r.deviceId);
+        });
+
+        // 按钮
+        Button btnClose = dialog.findViewById(R.id.dialog_btn_close);
+        Button btnDelete = dialog.findViewById(R.id.dialog_btn_delete);
+        Button btnDeleteDevice = dialog.findViewById(R.id.dialog_btn_delete_device);
+
+        btnClose.setOnClickListener(v -> dialog.dismiss());
+        btnDelete.setOnClickListener(v -> {
+            dialog.dismiss();
+            confirmDeleteSingle(r);
+        });
+        btnDeleteDevice.setOnClickListener(v -> {
+            dialog.dismiss();
+            confirmDeleteDevice(r);
+        });
+
+        dialog.show();
+    }
+
+    /** 弹窗展示某个设备的所有注册记录。 */
+    private void showDeviceHistory(String deviceId) {
+        List<RegRecordManager.Record> history = RegRecordManager.queryHistoryByDeviceId(this, deviceId);
+        if (history.isEmpty()) {
+            toast("该设备暂无注册记录");
+            return;
+        }
+
+        final boolean[] showAct = {false};
+
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(R.layout.dialog_device_history);
+
+        Window window = dialog.getWindow();
+        if (window != null) {
+            WindowManager.LayoutParams wlp = window.getAttributes();
+            wlp.width = (int) (getResources().getDisplayMetrics().widthPixels * 0.8);
+            wlp.height = (int) (getResources().getDisplayMetrics().heightPixels * 0.8);
+            wlp.gravity = Gravity.CENTER;
+            window.setAttributes(wlp);
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        }
+        dialog.setCancelable(true);
+        dialog.setCanceledOnTouchOutside(true);
+
+        TextView tvHistory = dialog.findViewById(R.id.dialog_history_text);
+        Button btnToggle = dialog.findViewById(R.id.dialog_history_toggle_act);
+
+        tvHistory.setText(RegRecordManager.formatHistory(history, false));
+
+        btnToggle.setOnClickListener(v -> {
+            showAct[0] = !showAct[0];
+            tvHistory.setText(RegRecordManager.formatHistory(history, showAct[0]));
+            btnToggle.setText(showAct[0] ? "隐藏激活码" : "显示激活码");
+        });
+
+        dialog.findViewById(R.id.dialog_history_btn_close).setOnClickListener(v -> dialog.dismiss());
+
+        dialog.show();
     }
 
     private void toast(String msg) {
@@ -187,21 +303,50 @@ public class RecordsActivity extends AppCompatActivity {
         }
 
         class VH extends RecyclerView.ViewHolder {
-            TextView tvDeviceId, tvRegTime, tvValidDays, tvExpiry;
+            TextView tvDeviceId, tvPackageName, tvRegTime, tvValidDays, tvExpiry, tvActCode;
+            View actToggle;
+            TextView actToggleLabel;
 
             VH(View v) {
                 super(v);
                 tvDeviceId = v.findViewById(R.id.item_device_id);
+                tvPackageName = v.findViewById(R.id.item_package_name);
                 tvRegTime = v.findViewById(R.id.item_reg_time);
                 tvValidDays = v.findViewById(R.id.item_valid_days);
                 tvExpiry = v.findViewById(R.id.item_expiry);
+                tvActCode = v.findViewById(R.id.item_activation_code);
+                actToggle = v.findViewById(R.id.item_act_toggle);
+                actToggleLabel = v.findViewById(R.id.item_act_toggle_label);
             }
 
             void bind(RegRecordManager.Record r) {
                 tvDeviceId.setText(r.deviceId);
+
+                // 包名（有则显示）
+                if (r.packageName != null && !r.packageName.isEmpty()) {
+                    tvPackageName.setText(r.packageName);
+                    tvPackageName.setVisibility(View.VISIBLE);
+                } else {
+                    tvPackageName.setVisibility(View.GONE);
+                }
+
                 tvRegTime.setText(r.regAt);
                 tvValidDays.setText(r.validDays == 0 ? "永久" : r.validDays + "天");
                 tvExpiry.setText(r.expiryDate);
+
+                // 激活码默认折叠
+                tvActCode.setText(r.activationCode);
+                tvActCode.setVisibility(View.GONE);
+                actToggleLabel.setText("激活码 ▶");
+                actToggle.setOnClickListener(vi -> {
+                    if (tvActCode.getVisibility() == View.GONE) {
+                        tvActCode.setVisibility(View.VISIBLE);
+                        actToggleLabel.setText("激活码 ▼");
+                    } else {
+                        tvActCode.setVisibility(View.GONE);
+                        actToggleLabel.setText("激活码 ▶");
+                    }
+                });
 
                 // 点击 → 详情
                 itemView.setOnClickListener(vi -> showDetail(r));
