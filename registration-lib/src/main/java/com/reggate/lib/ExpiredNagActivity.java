@@ -31,6 +31,11 @@ public class ExpiredNagActivity extends Activity {
         TextView tvTitle = findViewById(RegGateResources.getId(this, "reggate_tv_nag_title"));
         TextView tvMsg = findViewById(RegGateResources.getId(this, "reggate_tv_nag_msg"));
 
+        if (tvTitle == null || tvMsg == null) {
+            finish();
+            return;
+        }
+
         tvTitle.setText(RegGateResources.getString(this, "reggate_nag_title", appName == null ? "" : appName));
 
         String msg;
@@ -46,19 +51,23 @@ public class ExpiredNagActivity extends Activity {
         Button btnActivate = findViewById(RegGateResources.getId(this, "reggate_btn_nag_activate"));
         Button btnContinue = findViewById(RegGateResources.getId(this, "reggate_btn_nag_continue"));
 
-        btnActivate.setOnClickListener(v -> {
-            Intent it = new Intent(this, RegistrationActivity.class);
-            it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
-            it.putExtra(RegistrationActivity.EXTRA_EXPIRED, true);
-            it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, 0);
-            it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, licenseRemaining);
-            startActivityForResult(it, REQ_REGISTER);
-        });
+        if (btnActivate != null) {
+            btnActivate.setOnClickListener(v -> {
+                Intent it = new Intent(this, RegistrationActivity.class);
+                it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
+                it.putExtra(RegistrationActivity.EXTRA_EXPIRED, true);
+                it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, 0);
+                it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, licenseRemaining);
+                startActivityForResult(it, REQ_REGISTER);
+            });
+        }
 
-        btnContinue.setOnClickListener(v -> {
-            setResult(RESULT_CANCELED);
-            finish();
-        });
+        if (btnContinue != null) {
+            btnContinue.setOnClickListener(v -> {
+                setResult(RESULT_CANCELED);
+                finish();
+            });
+        }
     }
 
     @Override

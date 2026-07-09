@@ -56,7 +56,7 @@ public final class RegGateConfig {
      * 默认配置(写死在库中):
      *   - publicKey: 从 res/raw/reggate_pub_key.txt 读取
      *   - trialDays: 7 天(提供试用)
-     *   - promptTiming: FIRST_LAUNCH(首次启动弹框)
+     *   - promptTiming: EVERY_LAUNCH(每次启动弹框)
      *   - expireBehavior: BLOCK(到期限制功能)
      *   - firstTrialDialogDelayMs: 0(立即弹出)
      *   - appName: "本应用"
@@ -66,8 +66,8 @@ public final class RegGateConfig {
     private static final ExpireBehavior DEFAULT_EXPIRE_BEHAVIOR = ExpireBehavior.BLOCK;
     private static final long DEFAULT_FIRST_TRIAL_DELAY_MS = 0L;
 
-    private static ConfigHolder holder;
-    private static String defaultPublicKey = null;
+    private static volatile ConfigHolder holder;
+    private static volatile String defaultPublicKey = null;
 
     private final String publicKeyBase64;
     private final Class<?> mainActivityClass;

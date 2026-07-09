@@ -2,6 +2,7 @@ package com.reggate.lib;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.security.PublicKey;
@@ -28,6 +29,8 @@ public final class RegistrationManager {
 
     private static final String TAG = "RegGate";
     private static final long DAY_MS = 24L * 60 * 60 * 1000;
+    /** 时钟回拨检测容忍值(毫秒)，允许少量正常偏差 */
+    static final long CLOCK_TOLERANCE_MS = 60_000L;
 
     private final Context app;
     private final PrefsManager prefs;
@@ -48,7 +51,13 @@ public final class RegistrationManager {
     }
 
     public State getCurrentState() {
-        if (isLicensed()) return State.LICENSED;
+        // 始终先检查许可: 持有有效许可的用户不应因时钟回拨检测而被阻挡
+        if (checkLicensedInternal()) return State.LICENSED;
+
+        if (isTimeTampered()) {
+            Log.w(TAG, "检测到系统时钟回拨, 无有效许可, 强制判定为已过期");
+            return State.EXPIRED;
+        }
         int trialDays = getEffectiveTrialDays();
         if (trialDays > 0) {
             long first = prefs.getFirstLaunchMs();
@@ -61,6 +70,14 @@ public final class RegistrationManager {
     }
 
     public boolean isLicensed() {
+        if (isTimeTampered()) return false;
+        return checkLicensedInternal();
+    }
+
+    /**
+     * 包内许可校验(不含时钟回拨检测)，避免 getCurrentState() 调用链中重复检测。
+     */
+    private boolean checkLicensedInternal() {
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return false;
@@ -76,8 +93,8 @@ public final class RegistrationManager {
     }
 
     public boolean isLicensedOrTrialing() {
-        return getCurrentState() == State.LICENSED
-                || getCurrentState() == State.TRIALING;
+        State s = getCurrentState();
+        return s == State.LICENSED || s == State.TRIALING;
     }
 
     /**
@@ -147,9 +164,11 @@ public final class RegistrationManager {
     }
 
     private void startRegistrationActivity(android.app.Activity activity, boolean expired) {
+        boolean tampered = isTimeTampered();
         Intent it = new Intent(activity, RegistrationActivity.class);
         it.putExtra(RegistrationActivity.EXTRA_APP_NAME, config.getAppName());
         it.putExtra(RegistrationActivity.EXTRA_EXPIRED, expired);
+        it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, tampered);
         it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, getTrialRemainingDays());
         it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, getLicenseRemainingDays());
         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -255,8 +274,51 @@ public final class RegistrationManager {
 
     public long getFirstLaunchMs() { return prefs.getFirstLaunchMs(); }
 
+    /**
+     * 单调时钟交叉验证，检测系统时钟是否被回拨。
+     * 原理：{@link SystemClock#elapsedRealtime()} 从开机算起只增不减，
+     * 与 {@link System#currentTimeMillis()} 交叉比对，若 wall clock
+     * 在 realtime 持续增长时反而倒退，则判定为时钟被回拨。
+     */
+    public boolean isTimeTampered() {
+        long lastWall = prefs.getLastWallTime();
+        if (lastWall == 0L) {
+            updateClockCheckpoint();
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        long nowReal = SystemClock.elapsedRealtime();
+        long lastReal = prefs.getLastRealTime();
+        long realDelta = nowReal - lastReal;
+
+        if (realDelta >= 0) {
+            // 未重启：realtime 正常递增，wall clock 不应倒退
+            if (now < lastWall - CLOCK_TOLERANCE_MS) {
+                Log.w(TAG, "时钟回拨检测: wall=" + now + " < lastWall=" + lastWall
+                        + ", realDelta=" + realDelta + "ms");
+                return true;
+            }
+        } else {
+            // 设备重启后 realtime 归零。仅检查 wall clock 是否倒退。
+            if (now < lastWall - CLOCK_TOLERANCE_MS) {
+                Log.w(TAG, "时钟回拨检测(重启后): wall=" + now + " < lastWall=" + lastWall);
+                return true;
+            }
+        }
+
+        updateClockCheckpoint();
+        return false;
+    }
+
+    private void updateClockCheckpoint() {
+        prefs.updateClockCheckpoint(System.currentTimeMillis(), SystemClock.elapsedRealtime());
+    }
+
     public void ensureFirstLaunchRecorded() {
-        prefs.setFirstLaunchMsIfAbsent(System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        long real = SystemClock.elapsedRealtime();
+        prefs.recordFirstLaunchWithClock(now, real);
     }
 
     public long getTrialRemainingMs() {

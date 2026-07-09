@@ -16,6 +16,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".RecordsActivity"
+            android:exported="false"
+            android:label="注册记录"
+            android:parentActivityName=".MainActivity" />
+
     </application>
 
 </manifest>

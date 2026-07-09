@@ -38,11 +38,15 @@ public final class Base32 {
         return sb.toString();
     }
 
+    /** 最大允许的解码输入长度(防止恶意超长输入导致 OOM)。 */
+    private static final int MAX_DECODE_LENGTH = 1024;
+
     /** 解码;非法字符返回 null。 */
     public static byte[] decode(String s) {
         if (s == null) return null;
         String clean = s.replaceAll("[\\s-]", "").toUpperCase();
         if (clean.length() == 0) return new byte[0];
+        if (clean.length() > MAX_DECODE_LENGTH) return null;
 
         byte[] out = new byte[clean.length() * 5 / 8];
         int buffer = 0;

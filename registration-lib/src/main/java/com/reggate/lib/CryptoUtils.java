@@ -79,14 +79,10 @@ final class CryptoUtils {
             return null;
         }
 
-        License lic = new License();
-        lic.deviceId = expectedDeviceId;
-        lic.nonce = expectedNonce;
-        lic.validDays = validDays;
-        lic.issuedDay = issuedDay;
-        lic.issuedMs = issuedDay * DAY_MS;
-        lic.expiryMs = (validDays == 0) ? 0L : (issuedDay + validDays) * DAY_MS;
-        return lic;
+        long issuedMs = issuedDay * DAY_MS;
+        long expiryMs = (validDays == 0) ? 0L : (issuedDay + validDays) * DAY_MS;
+        return new License(expectedDeviceId, expectedNonce, validDays, issuedDay,
+                issuedMs, expiryMs);
     }
 
     static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, int validDays, long issuedDay) {
@@ -104,12 +100,22 @@ final class CryptoUtils {
     }
 
     static final class License {
-        public byte[] deviceId;
-        public byte[] nonce;
-        public int validDays;
-        public long issuedDay;
-        public long issuedMs;
-        public long expiryMs;
+        public final byte[] deviceId;
+        public final byte[] nonce;
+        public final int validDays;
+        public final long issuedDay;
+        public final long issuedMs;
+        public final long expiryMs;
+
+        License(byte[] deviceId, byte[] nonce, int validDays, long issuedDay,
+                long issuedMs, long expiryMs) {
+            this.deviceId = deviceId;
+            this.nonce = nonce;
+            this.validDays = validDays;
+            this.issuedDay = issuedDay;
+            this.issuedMs = issuedMs;
+            this.expiryMs = expiryMs;
+        }
 
         boolean isExpired() {
             return expiryMs > 0 && System.currentTimeMillis() > expiryMs;

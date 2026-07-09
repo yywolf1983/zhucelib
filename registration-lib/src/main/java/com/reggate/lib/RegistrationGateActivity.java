@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
 
 public class RegistrationGateActivity extends Activity {
 
@@ -57,7 +56,7 @@ public class RegistrationGateActivity extends Activity {
         }
 
         final long delayMs = manager.getConfig().getFirstTrialDialogDelayMs();
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+        new Handler().postDelayed(() -> {
             if (isFinishing()) return;
             Intent it = new Intent(this, TrialDialogActivity.class);
             it.putExtra(TrialDialogActivity.EXTRA_APP_NAME, manager.getConfig().getAppName());
@@ -84,6 +83,7 @@ public class RegistrationGateActivity extends Activity {
         Intent it = new Intent(this, RegistrationActivity.class);
         it.putExtra(RegistrationActivity.EXTRA_APP_NAME, manager.getConfig().getAppName());
         it.putExtra(RegistrationActivity.EXTRA_EXPIRED, expired);
+        it.putExtra(RegistrationActivity.EXTRA_TIME_TAMPERED, manager.isTimeTampered());
         it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, manager.getTrialRemainingDays());
         it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, manager.getLicenseRemainingDays());
         startActivityForResult(it, REQ_REGISTER);

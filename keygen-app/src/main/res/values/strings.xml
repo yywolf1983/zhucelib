@@ -13,9 +13,15 @@
     <string name="kg_request_code_label">客户机安装码</string>
     <string name="kg_request_code_hint">粘贴安装码</string>
     <string name="kg_paste_request">粘贴安装码</string>
+    <string name="kg_query_device">查询此设备</string>
     <string name="kg_valid_days_label">购买时长(天,0 = 永久)</string>
     <string name="kg_valid_days_hint">例如 30</string>
     <string name="kg_generate">生成激活码</string>
     <string name="kg_activation_code_label">激活码(发回给客户机)</string>
     <string name="kg_copy_activation">复制激活码</string>
+
+    <string name="kg_section_records">注册记录</string>
+    <string name="kg_view_records">查看记录</string>
+    <string name="kg_export_records">导出记录</string>
+    <string name="kg_storage_settings">存储位置</string>
 </resources>

@@ -82,10 +82,11 @@ public class RegGateCrypto {
         return cipher.doFinal(ciphertext);
     }
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private static byte[] generateIV() {
         byte[] iv = new byte[GCM_IV_LENGTH];
-        SecureRandom random = new SecureRandom();
-        random.nextBytes(iv);
+        SECURE_RANDOM.nextBytes(iv);
         return iv;
     }
 

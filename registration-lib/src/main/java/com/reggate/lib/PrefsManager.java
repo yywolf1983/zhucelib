@@ -13,6 +13,8 @@ final class PrefsManager {
     private static final String KEY_LICENSE_NONCE = "license_nonce";
     private static final String KEY_PENDING_NONCE = "pending_nonce";
     private static final String KEY_TRIAL_DIALOG_SHOWN = "trial_dialog_shown";
+    private static final String KEY_LAST_WALL_TIME = "last_wall_time";
+    private static final String KEY_LAST_REAL_TIME = "last_real_time";
 
     private final SharedPreferences sp;
 
@@ -22,12 +24,6 @@ final class PrefsManager {
     }
 
     long getFirstLaunchMs() { return sp.getLong(KEY_FIRST_LAUNCH_MS, 0L); }
-
-    void setFirstLaunchMsIfAbsent(long now) {
-        if (sp.getLong(KEY_FIRST_LAUNCH_MS, 0L) == 0L) {
-            sp.edit().putLong(KEY_FIRST_LAUNCH_MS, now).apply();
-        }
-    }
 
     String getActivationCode() { return sp.getString(KEY_ACTIVATION_CODE, null); }
 
@@ -70,4 +66,30 @@ final class PrefsManager {
     boolean isTrialDialogShown() { return sp.getBoolean(KEY_TRIAL_DIALOG_SHOWN, false); }
 
     void markTrialDialogShown() { sp.edit().putBoolean(KEY_TRIAL_DIALOG_SHOWN, true).apply(); }
+
+    // ------------------ 单调时钟交叉验证(防系统时钟回拨) ------------------
+
+    long getLastWallTime() { return sp.getLong(KEY_LAST_WALL_TIME, 0L); }
+
+    long getLastRealTime() { return sp.getLong(KEY_LAST_REAL_TIME, 0L); }
+
+    void updateClockCheckpoint(long wallTime, long realTime) {
+        sp.edit()
+                .putLong(KEY_LAST_WALL_TIME, wallTime)
+                .putLong(KEY_LAST_REAL_TIME, realTime)
+                .apply();
+    }
+
+    /**
+     * 首次启动时同时记录 wall clock 和单调时钟偏移。
+     */
+    void recordFirstLaunchWithClock(long wallClockMs, long realTimeMs) {
+        if (sp.getLong(KEY_FIRST_LAUNCH_MS, 0L) == 0L) {
+            sp.edit()
+                    .putLong(KEY_FIRST_LAUNCH_MS, wallClockMs)
+                    .putLong(KEY_LAST_WALL_TIME, wallClockMs)
+                    .putLong(KEY_LAST_REAL_TIME, realTimeMs)
+                    .apply();
+        }
+    }
 }

@@ -98,6 +98,9 @@ public class MainActivity extends AppCompatActivity {
                     java.util.Locale.getDefault());
             sb.append("\n首次启动: ").append(sdf.format(new java.util.Date(first)));
         }
+
+        boolean tampered = manager.isTimeTampered();
+        sb.append("\n时钟回拨: ").append(tampered ? "检测到异常" : "正常");
         tvLimits.setText(sb.toString());
     }
 }

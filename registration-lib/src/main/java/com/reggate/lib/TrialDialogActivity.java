@@ -33,22 +33,31 @@ public class TrialDialogActivity extends Activity {
         Button btnRegister = findViewById(RegGateResources.getId(this, "reggate_btn_trial_register"));
         Button btnContinue = findViewById(RegGateResources.getId(this, "reggate_btn_trial_continue"));
 
+        if (tvTitle == null || tvMsg == null) {
+            finish();
+            return;
+        }
+
         tvTitle.setText(RegGateResources.getString(this, "reggate_trial_title", appName == null ? "" : appName));
         tvMsg.setText(RegGateResources.getString(this, "reggate_trial_msg", trialDays, remainingDays));
 
-        btnRegister.setOnClickListener(v -> {
-            Intent it = new Intent(this, RegistrationActivity.class);
-            it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
-            it.putExtra(RegistrationActivity.EXTRA_EXPIRED, false);
-            it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, remainingDays);
-            it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
-            startActivityForResult(it, REQ_REGISTER);
-        });
+        if (btnRegister != null) {
+            btnRegister.setOnClickListener(v -> {
+                Intent it = new Intent(this, RegistrationActivity.class);
+                it.putExtra(RegistrationActivity.EXTRA_APP_NAME, appName);
+                it.putExtra(RegistrationActivity.EXTRA_EXPIRED, false);
+                it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, remainingDays);
+                it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, Integer.MIN_VALUE);
+                startActivityForResult(it, REQ_REGISTER);
+            });
+        }
 
-        btnContinue.setOnClickListener(v -> {
-            setResult(RESULT_CANCELED);
-            finish();
-        });
+        if (btnContinue != null) {
+            btnContinue.setOnClickListener(v -> {
+                setResult(RESULT_CANCELED);
+                finish();
+            });
+        }
     }
 
     @Override

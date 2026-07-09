@@ -110,13 +110,43 @@
             android:inputType="textNoSuggestions|textVisiblePassword"
             android:textSize="13sp" />
 
-        <Button
-            android:id="@+id/btn_paste_request"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:text="@string/kg_paste_request" />
+            android:layout_marginTop="2dp"
+            android:gravity="end"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_query_device"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/kg_query_device" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/btn_paste_request"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/kg_paste_request" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_query_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:paddingStart="4dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="已注册 · 3次 · 到期: 2027-07-09"
+            tools:visibility="visible" />
 
         <TextView
             android:layout_width="match_parent"
@@ -200,6 +230,76 @@
             android:layout_marginTop="6dp"
             android:enabled="false"
             android:text="@string/kg_copy_activation" />
+
+        <!-- 注册记录区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/kg_section_records"
+            android:textStyle="bold"
+            android:textColor="#1976D2" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tv_record_count"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:textColor="#666"
+                tools:text="共 0 个设备注册记录" />
+
+            <Button
+                android:id="@+id/btn_storage_settings"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/kg_storage_settings"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_storage_path"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textSize="11sp"
+            android:textColor="#AAA"
+            tools:text="默认: /storage/emulated/0/..." />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_view_records"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="@string/kg_view_records" />
+
+            <View android:layout_width="8dp" android:layout_height="0dp" />
+
+            <Button
+                android:id="@+id/btn_export_records"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="@string/kg_export_records" />
+        </LinearLayout>
 
         <View
             android:layout_width="match_parent"

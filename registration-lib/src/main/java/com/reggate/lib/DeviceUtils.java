@@ -52,10 +52,12 @@ public final class DeviceUtils {
         return androidId + "|" + Build.MANUFACTURER + "|" + Build.MODEL + "|" + Build.BRAND;
     }
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     /** 8 字节随机挑战 nonce(每次生成安装码时调用)。 */
     public static byte[] generateNonce() {
         byte[] nonce = new byte[8];
-        new SecureRandom().nextBytes(nonce);
+        SECURE_RANDOM.nextBytes(nonce);
         return nonce;
     }
 
