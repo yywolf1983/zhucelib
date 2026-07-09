@@ -21,6 +21,9 @@ local.properties
 !demo-app/keys/test_pub.pem
 !registration-lib/src/main/res/raw/reggate_pub_key.txt
 
+# Config
+registration-lib/src/main/assets/reggate_config.dat
+
 # OS
 .DS_Store
 Thumbs.db
