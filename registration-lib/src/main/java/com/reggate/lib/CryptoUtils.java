@@ -17,8 +17,8 @@ import java.util.Arrays;
  * 安装码(客户机 → 注册机): Base32( deviceId[12] || nonce[8] )
  *
  * 激活码(注册机 → 客户机): Base32( XOR(validDays[2] || issuedDay[4] || sig[256], keystream[262]) )
- *   - keystream = SHA-256 CTR(deviceId || nonce) 生成 262 字节密钥流 (全量隐写)
- *   - sig = SHA256withRSA 签名,覆盖 deviceId[12] || nonce[8] || validDays[2] || issuedDay[4]
+ *   - keystream = SHA-256 CTR(deviceId || nonce [|| pkgLen || pkgBytes]) 生成 262 字节密钥流 (全量隐写+包绑定)
+ *   - sig = SHA256withRSA 签名,覆盖 deviceId[12] || nonce[8] || validDays[2] || issuedDay[4] [|| pkgLen[2] || pkgBytes[...]]
  *   - 客户机用自身 deviceId+nonce 与激活码中的 validDays+issuedDay 重建签名消息再验签
  *
  * <b>安全模型:</b>
@@ -40,18 +40,24 @@ final class CryptoUtils {
     private CryptoUtils() {}
 
     /**
-     * 从 deviceId 和 nonce 派生指定长度的 XOR 密钥流（SHA-256 CTR 模式）。
-     * 用于对整个激活码载荷做全量隐写置乱/解乱。
-     * 与注册机端 {@code KeygenUtils.deriveKeystream} 完全一致。
+     * 从 deviceId、nonce 和可选 pkgBytes 派生指定长度的 XOR 密钥流（SHA-256 CTR 模式）。
+     *
+     * <p>若 pkgBytes 非空则密钥流绑定到具体 App 包，与注册机端完全一致。
      */
-    static byte[] deriveKeystream(byte[] deviceId, byte[] nonce, int length) {
+    static byte[] deriveKeystream(byte[] deviceId, byte[] nonce, byte[] pkgBytes, int length) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] keystream = new byte[length];
+            final boolean hasPkg = pkgBytes != null && pkgBytes.length > 0;
             for (int block = 0; block < length; block += 32) {
                 md.reset();
                 md.update(deviceId);
                 md.update(nonce);
+                if (hasPkg) {
+                    md.update((byte) (pkgBytes.length >> 8));
+                    md.update((byte) pkgBytes.length);
+                    md.update(pkgBytes);
+                }
                 md.update((byte) (block >> 24));
                 md.update((byte) (block >> 16));
                 md.update((byte) (block >> 8));
@@ -86,7 +92,8 @@ final class CryptoUtils {
     static License verifyActivationCode(String activationCode,
                                         PublicKey pub,
                                         byte[] expectedDeviceId,
-                                        byte[] expectedNonce) {
+                                        byte[] expectedNonce,
+                                        byte[] expectedPkgBytes) {
         if (activationCode == null || pub == null
                 || expectedDeviceId == null || expectedNonce == null) return null;
         if (expectedDeviceId.length != DEVICE_ID_LEN
@@ -97,8 +104,8 @@ final class CryptoUtils {
         int expectedLen = VALID_DAYS_LEN + ISSUED_DAY_LEN + SIG_LEN;
         if (data.length != expectedLen) return null;
 
-        // 全量解隐写：用派生密钥流对整个 262 字节做 XOR 解乱
-        byte[] keystream = deriveKeystream(expectedDeviceId, expectedNonce, data.length);
+        // 全量解隐写：用派生密钥流(含包名绑定)对整个 262 字节做 XOR 解乱
+        byte[] keystream = deriveKeystream(expectedDeviceId, expectedNonce, expectedPkgBytes, data.length);
         if (keystream == null) return null;
         xorScramble(data, keystream);
 
@@ -111,7 +118,7 @@ final class CryptoUtils {
         byte[] sig = new byte[SIG_LEN];
         System.arraycopy(data, VALID_DAYS_LEN + ISSUED_DAY_LEN, sig, 0, SIG_LEN);
 
-        byte[] msg = buildSignedMessage(expectedDeviceId, expectedNonce, validDays, issuedDay);
+        byte[] msg = buildSignedMessage(expectedDeviceId, expectedNonce, expectedPkgBytes, validDays, issuedDay);
 
         try {
             Signature verifier = Signature.getInstance("SHA256withRSA");
@@ -124,12 +131,18 @@ final class CryptoUtils {
 
         long issuedMs = issuedDay * DAY_MS;
         long expiryMs = (validDays == 0) ? 0L : (issuedDay + validDays) * DAY_MS;
-        return new License(expectedDeviceId, expectedNonce, validDays, issuedDay,
+        return new License(expectedDeviceId, expectedNonce, expectedPkgBytes, validDays, issuedDay,
                 issuedMs, expiryMs);
     }
 
-    static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, int validDays, long issuedDay) {
-        byte[] msg = new byte[DEVICE_ID_LEN + NONCE_LEN + VALID_DAYS_LEN + ISSUED_DAY_LEN];
+    /**
+     * 构建签名消息。若 pkgBytes 非空则包含包名以实现包级绑定。
+     */
+    static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, byte[] pkgBytes,
+                                     int validDays, long issuedDay) {
+        boolean hasPkg = pkgBytes != null && pkgBytes.length > 0;
+        int pkgPart = hasPkg ? 2 + pkgBytes.length : 0;
+        byte[] msg = new byte[DEVICE_ID_LEN + NONCE_LEN + VALID_DAYS_LEN + ISSUED_DAY_LEN + pkgPart];
         System.arraycopy(deviceId, 0, msg, 0, DEVICE_ID_LEN);
         System.arraycopy(nonce, 0, msg, DEVICE_ID_LEN, NONCE_LEN);
         int off = DEVICE_ID_LEN + NONCE_LEN;
@@ -138,22 +151,29 @@ final class CryptoUtils {
         msg[off++] = (byte) (issuedDay >> 24);
         msg[off++] = (byte) (issuedDay >> 16);
         msg[off++] = (byte) (issuedDay >> 8);
-        msg[off] = (byte) issuedDay;
+        msg[off++] = (byte) issuedDay;
+        if (hasPkg) {
+            msg[off++] = (byte) (pkgBytes.length >> 8);
+            msg[off] = (byte) pkgBytes.length;
+            System.arraycopy(pkgBytes, 0, msg, off + 1, pkgBytes.length);
+        }
         return msg;
     }
 
     static final class License {
         public final byte[] deviceId;
         public final byte[] nonce;
+        public final byte[] pkgBytes;   // null/empty = 无包绑定(旧格式)
         public final int validDays;
         public final long issuedDay;
         public final long issuedMs;
         public final long expiryMs;
 
-        License(byte[] deviceId, byte[] nonce, int validDays, long issuedDay,
+        License(byte[] deviceId, byte[] nonce, byte[] pkgBytes, int validDays, long issuedDay,
                 long issuedMs, long expiryMs) {
             this.deviceId = deviceId;
             this.nonce = nonce;
+            this.pkgBytes = (pkgBytes != null && pkgBytes.length > 0) ? pkgBytes : null;
             this.validDays = validDays;
             this.issuedDay = issuedDay;
             this.issuedMs = issuedMs;

@@ -50,14 +50,22 @@
         android:padding="12dp"
         android:textColor="#888"
         android:textSize="12sp"
-        tools:text="共 3 个设备" />
+        tools:text="共 3 个设备 · 5 个包" />
 
-    <!-- 列表 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler_records"
+    <!-- 设备分组列表（ScrollView 内动态填充卡片） -->
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:paddingBottom="16dp" />
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:id="@+id/ll_records_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="24dp" />
+
+    </ScrollView>
 
 </LinearLayout>

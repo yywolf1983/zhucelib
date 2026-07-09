@@ -61,7 +61,10 @@ nonce    = raw[12..19]
 ### 第五步：构建签名消息
 
 ```
-签名消息(26字节) = deviceId[12] || nonce[8] || validDays[2] || issuedDay[4]
+签名消息 = deviceId[12] || nonce[8] || validDays[2] || issuedDay[4] [|| pkgLen[2] || pkgBytes[...]]
+
+若安装码包含包名，签名消息会包含包名信息，实现包级绑定。
+不含包名时向后兼容旧格式 26 字节。
 ```
 
 | 偏移 | 长度 | 字段 |
@@ -86,26 +89,28 @@ byte[] sig = signer.sign();  // 256 字节签名结果
 
 ```
 1. 构建明文载荷(262字节) = validDays[2] || issuedDay[4] || signature[256]
-2. 生成密钥流(262字节): keystream = SHA-256 CTR(deviceId || nonce)
-   - 块0: SHA-256(deviceId || nonce || 0x00000000)[0:32]
-   - 块1: SHA-256(deviceId || nonce || 0x00000001)[0:32]
+2. 生成密钥流(262字节): keystream = SHA-256 CTR(deviceId || nonce || pkgLen || pkgBytes)
+   （若安装码含包名则包含包名，否则仅 deviceId+nonce）
+   - 块0: SHA-256(deviceId || nonce [|| pkgLen || pkgBytes] || 0x00000000)[0:32]
+   - 块1: SHA-256(deviceId || nonce [|| pkgLen || pkgBytes] || 0x00000001)[0:32]
    - ... (共 ceil(262/32) = 9 块)
 3. 全量 XOR 置乱: scrambled[i] = payload[i] XOR keystream[i]
 4. 激活码字符串 = Crockford Base32 编码(scrambled)，按每组5字符用 "-" 分隔
 ```
 
-**全量隐写机制**：整个 262 字节载荷（validDays + issuedDay + 签名）全部用设备绑定的密钥流 XOR 置乱。结果不可区分于随机数据，无任何固定字段或结构特征。
+**全量隐写机制**：整个 262 字节载荷全部用设备+包绑定的密钥流 XOR 置乱，结果不可区分于随机数据。
 
-**签名消息不参与隐写**：签名覆盖的 26 字节消息（deviceId + nonce + validDays + issuedDay）保持原始明文，仅激活码的存储/传输格式被混淆。
+**包级绑定**：签名消息和隐写密钥流均包含包名，同一设备的不同 App 包无法互换激活码。
 
 ### 第八步：验证激活码（客户端）
 
 ```
 1. 去除连字符 → Crockford Base32 解码 → 262 字节置乱数据
-2. 生成相同密钥流: keystream[262] = SHA-256 CTR(deviceId || nonce)
+2. 生成相同密钥流: keystream[262] = SHA-256 CTR(deviceId || nonce [|| pkgLen || pkgBytes])
+   （使用当前 App 包名或旧许可存储的包名）
 3. 全量 XOR 解乱: payload[i] = scrambled[i] XOR keystream[i]
 4. 解乱后解析: validDays = payload[0:2], issuedDay = payload[2:6], sig = payload[6:262]
-5. 重建签名消息: deviceId[12] + nonce[8] + validDays[2] + issuedDay[4]
+5. 重建签名消息(含包名): deviceId || nonce || validDays || issuedDay [|| pkgLen || pkgBytes]
 6. SHA256withRSA 验签: 用内置公钥验证(签名消息, sig)
 7. 验签失败 → 激活码无效
 8. 验签成功 → 计算到期时间:
@@ -140,10 +145,15 @@ byte[] sig = signer.sign();  // 256 字节签名结果
 ## 安全机制
 
 ### 设备绑定
-`deviceId`（设备 SHA-256 指纹前 12 字节）参与签名消息，激活码与设备强绑定。不同设备生成的 deviceId 不同，验签必然失败。
+`deviceId`（设备 SHA-256 指纹前 12 字节）参与签名消息和密钥流，激活码与设备强绑定。
+
+### 包级绑定
+安装码和激活码均包含包名（`pkgLen || pkgBytes`），签名消息和隐写密钥流绑定到具体 App 包。同一设备的不同 App 包（如 com.app.a vs com.app.b）的激活码不可互换。
 
 ### 防重放
-`nonce`（每次随机的 8 字节）参与签名消息。同一安装码的 nonce 固定，若重新生成安装码则 nonce 变化，旧激活码无法通过新 nonce 下的验签。
+
+### 防重放
+`nonce`（每次随机的 8 字节）参与签名消息和隐写密钥流。同一安装码的 nonce 固定，若重新生成安装码则 nonce 变化，旧激活码无法通过新 nonce 下的验签。
 
 ### 防篡改
 激活码中的 `validDays` 和 `issuedDay` 受 RSA-2048 签名保护，任何篡改都会导致验签失败。

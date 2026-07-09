@@ -5,12 +5,15 @@ import android.content.SharedPreferences;
 import android.text.TextUtils;
 import android.util.Base64;
 
+import java.nio.charset.StandardCharsets;
+
 final class PrefsManager {
 
     private static final String PREF_NAME = "reggate_prefs";
     private static final String KEY_FIRST_LAUNCH_MS = "first_launch_ms";
     private static final String KEY_ACTIVATION_CODE = "activation_code";
     private static final String KEY_LICENSE_NONCE = "license_nonce";
+    private static final String KEY_LICENSE_PACKAGE = "license_package";
     private static final String KEY_PENDING_NONCE = "pending_nonce";
     private static final String KEY_TRIAL_DIALOG_SHOWN = "trial_dialog_shown";
     private static final String KEY_LAST_WALL_TIME = "last_wall_time";
@@ -33,10 +36,21 @@ final class PrefsManager {
         return Base64.decode(b64, Base64.NO_WRAP);
     }
 
-    void saveLicense(String activationCode, byte[] nonce) {
+    /** 获取存储的许可包名（用于包级验签绑定）。无存储返回 null。 */
+    @androidx.annotation.Nullable
+    byte[] getLicensePkgBytes() {
+        String pkg = sp.getString(KEY_LICENSE_PACKAGE, null);
+        if (TextUtils.isEmpty(pkg)) return null;
+        return Base64.decode(pkg, Base64.NO_WRAP);
+    }
+
+    void saveLicense(String activationCode, byte[] nonce, String packageName) {
         sp.edit()
                 .putString(KEY_ACTIVATION_CODE, activationCode)
                 .putString(KEY_LICENSE_NONCE, Base64.encodeToString(nonce, Base64.NO_WRAP))
+                .putString(KEY_LICENSE_PACKAGE, !TextUtils.isEmpty(packageName)
+                        ? Base64.encodeToString(packageName.getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP)
+                        : null)
                 .apply();
     }
 
@@ -44,6 +58,7 @@ final class PrefsManager {
         sp.edit()
                 .remove(KEY_ACTIVATION_CODE)
                 .remove(KEY_LICENSE_NONCE)
+                .remove(KEY_LICENSE_PACKAGE)
                 .apply();
     }
 

@@ -89,6 +89,53 @@ final class RegRecordManager {
         }
     }
 
+    /** 设备分组视图: 一个设备 + 其下所有包的注册记录。 */
+    static final class DeviceGroup {
+        public final String deviceId;
+        public final List<Record> records;  // 该设备的所有记录，按时间排序
+
+        DeviceGroup(String deviceId, List<Record> records) {
+            this.deviceId = deviceId;
+            this.records = records;
+        }
+
+        /** 该设备下注册的包数量（去重）。 */
+        public int getPackageCount() {
+            java.util.Set<String> pkgs = new java.util.HashSet<>();
+            for (Record r : records) {
+                if (r.packageName != null && !r.packageName.isEmpty()) {
+                    pkgs.add(r.packageName);
+                }
+            }
+            return pkgs.isEmpty() ? records.size() : pkgs.size();
+        }
+
+        /** 该设备下所有不同的包名。 */
+        public List<String> getPackageNames() {
+            java.util.LinkedHashSet<String> pkgs = new java.util.LinkedHashSet<>();
+            for (Record r : records) {
+                String pkg = (r.packageName != null && !r.packageName.isEmpty())
+                        ? r.packageName : "(未指定)";
+                pkgs.add(pkg);
+            }
+            return new ArrayList<>(pkgs);
+        }
+
+        /** 按包名获取最新记录。 */
+        @Nullable
+        public Record getLatestByPackage(String packageName) {
+            Record latest = null;
+            for (Record r : records) {
+                String rPkg = (r.packageName != null && !r.packageName.isEmpty())
+                        ? r.packageName : "(未指定)";
+                if (rPkg.equals(packageName)) {
+                    if (latest == null || r.id > latest.id) latest = r;
+                }
+            }
+            return latest;
+        }
+    }
+
     // ==================== Storage Path ====================
 
     static boolean isCustomStorage(Context ctx) {
@@ -402,6 +449,25 @@ final class RegRecordManager {
             if (!ids.contains(r.deviceId)) ids.add(r.deviceId);
         }
         return ids.size();
+    }
+
+    /** 按 deviceId 分组返回所有设备的注册记录（用于设备总览视图）。 */
+    static List<DeviceGroup> getDeviceGroups(Context ctx) {
+        List<Record> all = readRecords(ctx);
+        java.util.LinkedHashMap<String, List<Record>> map = new java.util.LinkedHashMap<>();
+        for (Record r : all) {
+            List<Record> list = map.get(r.deviceId);
+            if (list == null) {
+                list = new ArrayList<>();
+                map.put(r.deviceId, list);
+            }
+            list.add(r);
+        }
+        List<DeviceGroup> groups = new ArrayList<>();
+        for (java.util.Map.Entry<String, List<Record>> e : map.entrySet()) {
+            groups.add(new DeviceGroup(e.getKey(), e.getValue()));
+        }
+        return groups;
     }
 
     // ==================== I/O ====================

@@ -18,8 +18,9 @@ import java.util.Arrays;
  * 输入:安装码 = Base32( deviceId[12] || nonce[8] )
  *
  * 输出:激活码 = Base32( XOR(validDays[2] || issuedDay[4] || sig[256], keystream[262]) )
- *   - keystream = SHA-256 CTR(deviceId || nonce) 生成 262 字节密钥流 (全量隐写)
- *   - 签名消息 = deviceId[12] || nonce[8] || validDays[2 BE] || issuedDay[4 BE]
+ *   - keystream = SHA-256 CTR(deviceId || nonce [|| pkgLen || pkgBytes]) 生成 262 字节密钥流 (全量隐写+包绑定)
+ *   - 签名消息 = deviceId[12] || nonce[8] || validDays[2 BE] || issuedDay[4 BE] [|| pkgLen[2] || pkgBytes[...]]
+ *   - sig = SHA256withRSA 签名(私钥)
  *   - sig = SHA256withRSA 签名(私钥)
  *
  * <b>私钥来源:</b>从本地文件加载(.pem/.der),不存储在注册机内。
@@ -38,18 +39,25 @@ final class KeygenUtils {
     private KeygenUtils() {}
 
     /**
-     * 从 deviceId 和 nonce 派生指定长度的 XOR 密钥流（SHA-256 CTR 模式）。
-     * 用于对整个激活码载荷做全量隐写置乱，使输出完全不可区分于随机数据。
-     * 两端(注册机/客户端)使用相同派生逻辑，确保 XOR 可逆。
+     * 从 deviceId、nonce 和可选的 pkgBytes 派生指定长度的 XOR 密钥流（SHA-256 CTR 模式）。
+     *
+     * <p>若 pkgBytes 非空，则密钥流绑定到具体 App 包，防止同设备不同包间的激活码互换。
+     * 若 pkgBytes 为空，向后兼容旧格式（无包绑定）。
      */
-    static byte[] deriveKeystream(byte[] deviceId, byte[] nonce, int length) {
+    static byte[] deriveKeystream(byte[] deviceId, byte[] nonce, byte[] pkgBytes, int length) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] keystream = new byte[length];
+            final boolean hasPkg = pkgBytes != null && pkgBytes.length > 0;
             for (int block = 0; block < length; block += 32) {
                 md.reset();
                 md.update(deviceId);
                 md.update(nonce);
+                if (hasPkg) {
+                    md.update((byte) (pkgBytes.length >> 8));
+                    md.update((byte) pkgBytes.length);
+                    md.update(pkgBytes);
+                }
                 // CTR 模式: 块序号写入大端 4 字节
                 md.update((byte) (block >> 24));
                 md.update((byte) (block >> 16));
@@ -127,10 +135,11 @@ final class KeygenUtils {
         if (parsed == null) throw new IllegalArgumentException("安装码格式错误");
         byte[] deviceId = parsed[0];
         byte[] nonce = parsed[1];
+        byte[] pkgBytes = parsed[2]; // 可能为空(旧格式向后兼容)
 
         long issuedDay = System.currentTimeMillis() / DAY_MS;
 
-        byte[] msg = buildSignedMessage(deviceId, nonce, validDays, issuedDay);
+        byte[] msg = buildSignedMessage(deviceId, nonce, pkgBytes, validDays, issuedDay);
 
         Signature signer = Signature.getInstance("SHA256withRSA");
         signer.initSign(priv);
@@ -147,15 +156,22 @@ final class KeygenUtils {
         out[5] = (byte) issuedDay;
         System.arraycopy(sig, 0, out, VALID_DAYS_LEN + ISSUED_DAY_LEN, sig.length);
 
-        // 全量隐写置乱：用派生密钥流对整个 262 字节做 XOR，消除一切固定结构
-        byte[] keystream = deriveKeystream(deviceId, nonce, out.length);
+        // 全量隐写置乱：用派生密钥流(含包名绑定)对整个 262 字节做 XOR，消除一切固定结构
+        byte[] keystream = deriveKeystream(deviceId, nonce, pkgBytes, out.length);
         xorScramble(out, keystream);
 
         return Base32.group(Base32.encode(out), 5);
     }
 
-    static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, int validDays, long issuedDay) {
-        byte[] msg = new byte[DEVICE_ID_LEN + NONCE_LEN + VALID_DAYS_LEN + ISSUED_DAY_LEN];
+    /**
+     * 构建签名消息。若 pkgBytes 非空，消息中包含包名以实现包级绑定。
+     * 消息结构: deviceId[12] || nonce[8] || validDays[2] || issuedDay[4] [|| pkgLen[2] || pkgBytes[pkgLen]]
+     */
+    static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, byte[] pkgBytes,
+                                     int validDays, long issuedDay) {
+        boolean hasPkg = pkgBytes != null && pkgBytes.length > 0;
+        int pkgPart = hasPkg ? 2 + pkgBytes.length : 0;
+        byte[] msg = new byte[DEVICE_ID_LEN + NONCE_LEN + VALID_DAYS_LEN + ISSUED_DAY_LEN + pkgPart];
         System.arraycopy(deviceId, 0, msg, 0, DEVICE_ID_LEN);
         System.arraycopy(nonce, 0, msg, DEVICE_ID_LEN, NONCE_LEN);
         int off = DEVICE_ID_LEN + NONCE_LEN;
@@ -164,7 +180,12 @@ final class KeygenUtils {
         msg[off++] = (byte) (issuedDay >> 24);
         msg[off++] = (byte) (issuedDay >> 16);
         msg[off++] = (byte) (issuedDay >> 8);
-        msg[off] = (byte) issuedDay;
+        msg[off++] = (byte) issuedDay;
+        if (hasPkg) {
+            msg[off++] = (byte) (pkgBytes.length >> 8);
+            msg[off] = (byte) pkgBytes.length;
+            System.arraycopy(pkgBytes, 0, msg, off + 1, pkgBytes.length);
+        }
         return msg;
     }
 

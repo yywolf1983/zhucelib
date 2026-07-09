@@ -75,6 +75,12 @@ public final class RegistrationManager {
         return checkLicensedInternal();
     }
 
+    /** 从 Prefs 读取许可包名字节，无存储返回空数组（向后兼容旧许可）。 */
+    private byte[] getLicensePkgBytes() {
+        byte[] stored = prefs.getLicensePkgBytes();
+        return stored != null ? stored : new byte[0];
+    }
+
     /**
      * 包内许可校验(不含时钟回拨检测)，避免 getCurrentState() 调用链中重复检测。
      */
@@ -82,7 +88,8 @@ public final class RegistrationManager {
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return false;
-        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(code, publicKey, deviceId, nonce);
+        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(
+                code, publicKey, deviceId, nonce, getLicensePkgBytes());
         return lic != null && !lic.isExpired();
     }
 
@@ -203,7 +210,8 @@ public final class RegistrationManager {
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return null;
-        return CryptoUtils.verifyActivationCode(code, publicKey, deviceId, nonce);
+        return CryptoUtils.verifyActivationCode(
+                code, publicKey, deviceId, nonce, getLicensePkgBytes());
     }
 
     public int getEffectiveTrialDays() {
@@ -295,15 +303,17 @@ public final class RegistrationManager {
         if (nonce == null || nonce.length != CryptoUtils.NONCE_LEN) {
             return VerifyResult.invalid("请先获取安装码");
         }
+        // 包名参与验签: 安装码中的包名 ≈ 当前 App 的包名
+        byte[] pkgBytes = app.getPackageName().getBytes(StandardCharsets.UTF_8);
         CryptoUtils.License lic = CryptoUtils.verifyActivationCode(
-                inputCode, publicKey, deviceId, nonce);
+                inputCode, publicKey, deviceId, nonce, pkgBytes);
         if (lic == null) {
             return VerifyResult.invalid("激活码无效或与安装码不匹配");
         }
         if (lic.isExpired()) {
             return VerifyResult.invalid("激活码已过期");
         }
-        prefs.saveLicense(inputCode.trim(), nonce);
+        prefs.saveLicense(inputCode.trim(), nonce, app.getPackageName());
         prefs.setPendingNonce(null);
         // 清除异常状态：重置时钟检测基准点，防止之前的时钟回拨标记阻断正常使用
         updateClockCheckpoint();
@@ -323,7 +333,8 @@ public final class RegistrationManager {
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return false;
-        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(code, publicKey, deviceId, nonce);
+        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(
+                code, publicKey, deviceId, nonce, getLicensePkgBytes());
         return lic == null;
     }
 
@@ -407,7 +418,8 @@ public final class RegistrationManager {
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return null;
-        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(code, publicKey, deviceId, nonce);
+        CryptoUtils.License lic = CryptoUtils.verifyActivationCode(
+                code, publicKey, deviceId, nonce, getLicensePkgBytes());
         if (lic == null) return null;
         return lic.expiryMs;
     }
