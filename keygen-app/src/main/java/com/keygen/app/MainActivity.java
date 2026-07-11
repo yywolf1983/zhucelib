@@ -41,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String PREF_LAST_KEY_URI = "last_key_uri";
 
     private PrivateKey privateKey;
-    private TextView tvPubKey;
     private TextView tvPrivStatus;
     private EditText etRequestCode;
     private EditText etValidDays;
@@ -51,7 +50,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvExpiryResult;
     private Button btnGenerate;
     private Button btnCopyActivation;
-    private Button btnCopyPub;
     private Button btnViewRecords;
     private Button btnExportRecords;
     private Button btnStorageSettings;
@@ -65,7 +63,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tvPubKey = findViewById(R.id.tv_pub_key);
         tvPrivStatus = findViewById(R.id.tv_priv_status);
         etRequestCode = findViewById(R.id.et_request_code);
         etValidDays = findViewById(R.id.et_valid_days);
@@ -78,18 +75,9 @@ public class MainActivity extends AppCompatActivity {
         btnCopyActivation = findViewById(R.id.btn_copy_activation);
 
         Button btnSelectPriv = findViewById(R.id.btn_select_priv);
-        btnCopyPub = findViewById(R.id.btn_copy_pub);
         Button btnPasteRequest = findViewById(R.id.btn_paste_request);
 
         btnSelectPriv.setOnClickListener(v -> openPrivateKeyFile());
-
-        btnCopyPub.setOnClickListener(v -> {
-            if (privateKey == null) {
-                toast("请先选择私钥文件");
-                return;
-            }
-            copyToClipboard("public_key", tvPubKey.getText().toString());
-        });
 
         btnPasteRequest.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -341,14 +329,6 @@ public class MainActivity extends AppCompatActivity {
 
             privateKey = KeygenUtils.parsePrivateKey(keyContent);
 
-            java.security.interfaces.RSAPrivateCrtKey rsaPriv =
-                    (java.security.interfaces.RSAPrivateCrtKey) privateKey;
-            java.security.spec.RSAPublicKeySpec pubSpec = new java.security.spec.RSAPublicKeySpec(
-                    rsaPriv.getModulus(), rsaPriv.getPublicExponent());
-            java.security.PublicKey pub = java.security.KeyFactory.getInstance("RSA").generatePublic(pubSpec);
-            String pubB64 = android.util.Base64.encodeToString(pub.getEncoded(), android.util.Base64.NO_WRAP);
-
-            tvPubKey.setText(pubB64);
             tvPrivStatus.setText("私钥已加载: " + uri.getLastPathSegment());
             tvPackageInfo.setVisibility(View.GONE);
             tvActivationCode.setText("");
@@ -785,7 +765,6 @@ public class MainActivity extends AppCompatActivity {
     private void updateUiState() {
         boolean hasKey = privateKey != null;
         btnGenerate.setEnabled(hasKey);
-        btnCopyPub.setEnabled(hasKey);
         if (!hasKey) {
             tvPrivStatus.setText("未选择私钥文件");
         }
