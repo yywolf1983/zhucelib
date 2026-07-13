@@ -24,6 +24,12 @@ local.properties
 # Config
 registration-lib/src/main/assets/reggate_config.dat
 
+# QR Code (由 build_all.sh 从外部配置目录自动复制,不提交到仓库)
+registration-lib/src/main/res/drawable/reggate_qr_code.png
+registration-lib/src/main/res/drawable/reggate_qr_code.jpg
+registration-lib/src/main/res/drawable/reggate_qr_code.jpeg
+registration-lib/src/main/res/drawable/reggate_qr_code.webp
+
 # OS
 .DS_Store
 Thumbs.db

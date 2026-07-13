@@ -1,13 +1,12 @@
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
+import java.security.MessageDigest
+import java.security.SecureRandom
+
 apply plugin: 'com.android.library'
 
 def libDir = projectDir
-def scriptsDir = new File(libDir, '../scripts')
-if (!scriptsDir.exists()) {
-    def envScriptsDir = System.getenv('REGGATE_SCRIPTS_DIR')
-    if (envScriptsDir) {
-        scriptsDir = new File(envScriptsDir)
-    }
-}
 
 tasks.register('encryptConfig') {
     def configDir = System.getenv('REGGATE_CONFIG_DIR') ?: '/Users/yy/pro-test/anddex-config'
@@ -19,29 +18,40 @@ tasks.register('encryptConfig') {
 
     doLast {
         if (inputFile.exists()) {
-            def javaFile = new File(scriptsDir, 'EncryptConfig.java')
-            def classFile = new File(scriptsDir, 'EncryptConfig.class')
-
-            def javacProc = new ProcessBuilder('javac', javaFile.absolutePath)
-                .directory(scriptsDir)
-                .inheritIO()
-                .start()
-            javacProc.waitFor()
-            if (javacProc.exitValue() != 0) {
-                throw new GradleException("Failed to compile EncryptConfig.java at ${javaFile}")
+            def masterKey = new byte[] {
+                0x52, 0x65, 0x67, 0x47,
+                0x61, 0x74, 0x65, 0x4C,
+                0x69, 0x62, 0x32, 0x30,
+                0x32, 0x34, 0x4B, 0x65,
+                0x79, 0x79, 0x4E, 0x6F,
+                0x6E, 0x65, 0x73, 0x54,
+                0x6F, 0x70, 0x41, 0x70,
+                0x70, 0x4B, 0x65, 0x79
             }
 
-            def javaProc = new ProcessBuilder('java', '-cp', '.', 'EncryptConfig',
-                inputFile.absolutePath, outputFile.absolutePath)
-                .directory(scriptsDir)
-                .inheritIO()
-                .start()
-            javaProc.waitFor()
-            if (javaProc.exitValue() != 0) {
-                throw new GradleException("Failed to encrypt config file")
+            def plaintext = inputFile.getText('UTF-8').getBytes('UTF-8')
+
+            def iv = new byte[12]
+            new SecureRandom().nextBytes(iv)
+
+            def digest = MessageDigest.getInstance('SHA-256')
+            def keyHash = digest.digest(masterKey)
+            def key = new SecretKeySpec(keyHash, 'AES')
+
+            def cipher = Cipher.getInstance('AES/GCM/NoPadding')
+            def spec = new GCMParameterSpec(128, iv)
+            cipher.init(Cipher.ENCRYPT_MODE, key, spec)
+            def ciphertext = cipher.doFinal(plaintext)
+
+            def result = new byte[iv.length + ciphertext.length]
+            System.arraycopy(iv, 0, result, 0, iv.length)
+            System.arraycopy(ciphertext, 0, result, iv.length, ciphertext.length)
+
+            outputFile.parentFile.mkdirs()
+            outputFile.withOutputStream { os ->
+                os.write(result)
             }
 
-            classFile.delete()
             println "Encrypted config: ${inputFile} -> ${outputFile}"
         } else {
             println "Warning: Config file not found at ${inputFile}"
