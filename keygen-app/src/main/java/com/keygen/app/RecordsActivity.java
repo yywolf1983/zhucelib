@@ -8,12 +8,14 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -122,6 +124,19 @@ public class RecordsActivity extends AppCompatActivity {
         header.addView(tvArrow);
         card.addView(header);
 
+        // === 设备备注（如果有） ===
+        String remark = RegRecordManager.getDeviceRemark(this, group.deviceId);
+        if (!remark.isEmpty()) {
+            TextView tvRemark = new TextView(this);
+            tvRemark.setText("📝 " + remark);
+            tvRemark.setTextSize(11);
+            tvRemark.setTextColor(0xFF666666);
+            tvRemark.setPadding(dp(12), dp(2), dp(12), dp(2));
+            tvRemark.setMaxLines(2);
+            tvRemark.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            card.addView(tvRemark);
+        }
+
         // === 展开内容: 包名列表（第二层） ===
         final LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
@@ -145,6 +160,16 @@ public class RecordsActivity extends AppCompatActivity {
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setGravity(Gravity.END);
         btnRow.setPadding(0, dp(8), 0, 0);
+
+        // 备注按钮
+        final String currentRemark = RegRecordManager.getDeviceRemark(this, group.deviceId);
+        TextView btnRemark = new TextView(this);
+        btnRemark.setText(currentRemark.isEmpty() ? "添加备注" : "编辑备注");
+        btnRemark.setTextSize(11);
+        btnRemark.setTextColor(0xFF1976D2);
+        btnRemark.setPadding(dp(4), dp(4), dp(12), dp(4));
+        btnRemark.setOnClickListener(v -> showRemarkDialog(group.deviceId, currentRemark));
+        btnRow.addView(btnRemark);
 
         TextView btnDel = new TextView(this);
         btnDel.setText("删除该设备全部记录");
@@ -265,6 +290,35 @@ public class RecordsActivity extends AppCompatActivity {
         return row;
     }
 
+    // ==================== 备注编辑 ====================
+
+    private void showRemarkDialog(String deviceId, String currentRemark) {
+        final EditText et = new EditText(this);
+        et.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setMaxLines(3);
+        et.setHint("输入设备备注（如客户名称、联系方式等）");
+        if (!currentRemark.isEmpty()) et.setText(currentRemark);
+        et.setSelection(et.getText().length());
+        et.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dp(8), dp(8), dp(8), dp(8));
+        container.addView(et);
+
+        new AlertDialog.Builder(this)
+                .setTitle(currentRemark.isEmpty() ? "添加备注" : "编辑备注")
+                .setView(container)
+                .setPositiveButton("保存", (d, w) -> {
+                    String text = et.getText().toString().trim();
+                    RegRecordManager.setDeviceRemark(this, deviceId, text);
+                    loadRecords();
+                    toast(text.isEmpty() ? "已清除备注" : "已保存备注");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
     // ==================== 详情 / 删除 ====================
 
     private void showRecordDetail(RegRecordManager.Record r) {
@@ -357,6 +411,7 @@ public class RecordsActivity extends AppCompatActivity {
                         + total + " 条注册记录？")
                 .setPositiveButton("全部删除", (d, w) -> {
                     RegRecordManager.deleteByDeviceId(this, group.deviceId);
+                    RegRecordManager.deleteDeviceRemark(this, group.deviceId);
                     loadRecords();
                     toast("已删除 " + total + " 条记录");
                 })

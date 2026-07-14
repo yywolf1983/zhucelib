@@ -433,6 +433,19 @@ public class MainActivity extends AppCompatActivity {
         header.addView(tvArrow);
         card.addView(header);
 
+        // 设备备注（如果有）
+        String remark = RegRecordManager.getDeviceRemark(this, group.deviceId);
+        if (!remark.isEmpty()) {
+            TextView tvRemark = new TextView(this);
+            tvRemark.setText("📝 " + remark);
+            tvRemark.setTextSize(11);
+            tvRemark.setTextColor(0xFF666666);
+            tvRemark.setPadding(dp(12), dp(2), dp(12), dp(2));
+            tvRemark.setMaxLines(2);
+            tvRemark.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            card.addView(tvRemark);
+        }
+
         // 包详情容器（默认折叠）: 第二层按包名展示
         final LinearLayout pkgContainer = new LinearLayout(this);
         pkgContainer.setOrientation(LinearLayout.VERTICAL);
@@ -457,6 +470,17 @@ public class MainActivity extends AppCompatActivity {
         btnRow.setGravity(Gravity.END);
         btnRow.setPadding(0, dp(6), 0, 0);
 
+        // 备注按钮
+        final String currentRemark = RegRecordManager.getDeviceRemark(this, group.deviceId);
+        TextView btnRemark = new TextView(this);
+        btnRemark.setText(currentRemark.isEmpty() ? "添加备注" : "编辑备注");
+        btnRemark.setTextSize(11);
+        btnRemark.setTextColor(0xFF1976D2);
+        btnRemark.setPadding(dp(4), dp(4), dp(12), dp(4));
+        btnRemark.setClickable(true);
+        btnRemark.setFocusable(true);
+        btnRemark.setOnClickListener(v -> showRemarkDialog(group.deviceId, currentRemark));
+
         TextView btnDetail = new TextView(this);
         btnDetail.setText("详情");
         btnDetail.setTextSize(11);
@@ -475,6 +499,7 @@ public class MainActivity extends AppCompatActivity {
         btnDelete.setFocusable(true);
         btnDelete.setOnClickListener(v -> confirmDeleteDeviceOverview(group));
 
+        btnRow.addView(btnRemark);
         btnRow.addView(btnDetail);
         btnRow.addView(btnDelete);
         pkgContainer.addView(btnRow);
@@ -586,6 +611,44 @@ public class MainActivity extends AppCompatActivity {
         tvStats.setTextColor(0xFF78909C);
         tvStats.setPadding(0, dp(4), 0, 0);
         headerCard.addView(tvStats);
+
+        // 备注显示
+        String remark = RegRecordManager.getDeviceRemark(this, group.deviceId);
+        if (!remark.isEmpty()) {
+            TextView tvRemarkLabel = new TextView(this);
+            tvRemarkLabel.setText("备注");
+            tvRemarkLabel.setTextSize(10);
+            tvRemarkLabel.setTextColor(0xFF888888);
+            tvRemarkLabel.setPadding(0, dp(6), 0, dp(2));
+            headerCard.addView(tvRemarkLabel);
+
+            TextView tvRemark = new TextView(this);
+            tvRemark.setText(remark);
+            tvRemark.setTextSize(12);
+            tvRemark.setTextColor(0xFF555555);
+            headerCard.addView(tvRemark);
+        }
+
+        // 备注操作按钮
+        LinearLayout remarkBtnRow = new LinearLayout(this);
+        remarkBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+        remarkBtnRow.setGravity(Gravity.END);
+        remarkBtnRow.setPadding(0, dp(6), 0, 0);
+
+        TextView btnEditRemark = new TextView(this);
+        btnEditRemark.setText(remark.isEmpty() ? "添加备注" : "编辑备注");
+        btnEditRemark.setTextSize(11);
+        btnEditRemark.setTextColor(0xFF1976D2);
+        btnEditRemark.setPadding(dp(8), dp(2), dp(8), dp(2));
+        btnEditRemark.setClickable(true);
+        btnEditRemark.setFocusable(true);
+        btnEditRemark.setOnClickListener(v -> {
+            dialog.dismiss();
+            showRemarkDialog(group.deviceId, remark);
+        });
+
+        remarkBtnRow.addView(btnEditRemark);
+        headerCard.addView(remarkBtnRow);
 
         container.addView(headerCard);
 
@@ -733,9 +796,39 @@ public class MainActivity extends AppCompatActivity {
                         + total + " 条注册记录？")
                 .setPositiveButton("全部删除", (d, w) -> {
                     RegRecordManager.deleteByDeviceId(this, group.deviceId);
+                    RegRecordManager.deleteDeviceRemark(this, group.deviceId);
                     refreshRecordCount();
                     refreshDeviceOverview();
                     toast("已删除 " + total + " 条记录");
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ==================== 备注编辑 ====================
+
+    private void showRemarkDialog(String deviceId, String currentRemark) {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        et.setMaxLines(3);
+        et.setHint("输入设备备注（如客户名称、联系方式等）");
+        if (!currentRemark.isEmpty()) et.setText(currentRemark);
+        et.setSelection(et.getText().length());
+        et.setPadding(dp(16), dp(12), dp(16), dp(12));
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding(dp(8), dp(8), dp(8), dp(8));
+        container.addView(et);
+
+        new AlertDialog.Builder(this)
+                .setTitle(currentRemark.isEmpty() ? "添加备注" : "编辑备注")
+                .setView(container)
+                .setPositiveButton("保存", (d, w) -> {
+                    String text = et.getText().toString().trim();
+                    RegRecordManager.setDeviceRemark(this, deviceId, text);
+                    refreshDeviceOverview();
+                    toast(text.isEmpty() ? "已清除备注" : "已保存备注");
                 })
                 .setNegativeButton("取消", null)
                 .show();

@@ -46,6 +46,7 @@ final class RegRecordManager {
     private static final String PREFS_NAME = "reggate_records_prefs";
     private static final String PREF_STORAGE_URI = "storage_tree_uri";
     private static final String PREF_USE_CUSTOM = "use_custom_storage";
+    private static final String REMARKS_PREFS = "reggate_device_remarks";
 
     private static final SimpleDateFormat SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
 
@@ -590,6 +591,33 @@ final class RegRecordManager {
                 a.packageGroups.get(0).records.get(0).id));
 
         return result;
+    }
+
+    // ==================== Device Remarks ====================
+
+    /** 获取设备备注，无备注返回空字符串。 */
+    static String getDeviceRemark(Context ctx, String deviceId) {
+        if (deviceId == null || deviceId.isEmpty()) return "";
+        return ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE)
+                .getString(deviceId, "");
+    }
+
+    /** 设置/修改设备备注。备注为空则删除。 */
+    static void setDeviceRemark(Context ctx, String deviceId, String remark) {
+        if (deviceId == null || deviceId.isEmpty()) return;
+        SharedPreferences prefs = ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE);
+        if (remark == null || remark.trim().isEmpty()) {
+            prefs.edit().remove(deviceId).apply();
+        } else {
+            prefs.edit().putString(deviceId, remark.trim()).apply();
+        }
+    }
+
+    /** 删除设备备注。 */
+    static void deleteDeviceRemark(Context ctx, String deviceId) {
+        if (deviceId == null || deviceId.isEmpty()) return;
+        ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE)
+                .edit().remove(deviceId).apply();
     }
 
     // ==================== I/O ====================
