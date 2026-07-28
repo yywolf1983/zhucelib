@@ -358,6 +358,16 @@ public class RecordsActivity extends AppCompatActivity {
         tvRegTime.setText(r.regAt);
         tvValidDays.setText(r.validDays == 0 ? "永久" : r.validDays + " 天");
         tvExpiry.setText(r.expiryDate);
+
+        View remarkRow = dialog.findViewById(R.id.dialog_detail_remark_row);
+        TextView tvRemark = dialog.findViewById(R.id.dialog_detail_remark);
+        if (r.remark != null && !r.remark.isEmpty()) {
+            tvRemark.setText(r.remark);
+            remarkRow.setVisibility(View.VISIBLE);
+        } else {
+            remarkRow.setVisibility(View.GONE);
+        }
+
         tvActCode.setText(r.activationCode);
 
         View actToggle = dialog.findViewById(R.id.dialog_detail_act_toggle);

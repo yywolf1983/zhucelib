@@ -186,6 +186,33 @@
                     tools:text="2027-07-09" />
             </LinearLayout>
 
+            <!-- 设备备注 -->
+            <LinearLayout
+                android:id="@+id/dialog_detail_remark_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="设备备注: "
+                    android:textColor="#888"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/dialog_detail_remark"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#555"
+                    android:textSize="13sp"
+                    android:textIsSelectable="true"
+                    tools:text="虚拟机" />
+            </LinearLayout>
+
             <!-- 激活码（折叠） -->
             <LinearLayout
                 android:id="@+id/dialog_detail_act_toggle"

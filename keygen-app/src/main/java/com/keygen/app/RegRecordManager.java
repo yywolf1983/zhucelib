@@ -59,6 +59,7 @@ final class RegRecordManager {
     private static final String K_EXPIRY_DATE = "expiryDate";
     private static final String K_REG_AT = "regAt";
     private static final String K_ACTIVATION_CODE = "activationCode";
+    private static final String K_REMARK = "remark";
 
     private RegRecordManager() {}
 
@@ -73,6 +74,7 @@ final class RegRecordManager {
         String expiryDate;   // 到期日
         String regAt;        // 注册时间
         String activationCode;// 生成的激活码
+        String remark;         // 设备备注（同设备所有记录共享）
 
         @Override
         public String toString() {
@@ -258,6 +260,7 @@ final class RegRecordManager {
         r.expiryDate = expiry;
         r.regAt = now;
         r.activationCode = activationCode;
+        r.remark = "";
         records.add(r);
 
         writeRecords(ctx, records);
@@ -328,6 +331,7 @@ final class RegRecordManager {
         r.expiryDate = expiry;
         r.regAt = now;
         r.activationCode = activationCode;
+        r.remark = "";
         records.add(r);
 
         writeRecords(ctx, records);
@@ -354,6 +358,7 @@ final class RegRecordManager {
                 r.expiryDate = obj.optString(K_EXPIRY_DATE, "");
                 r.regAt = obj.optString(K_REG_AT, "");
                 r.activationCode = obj.optString(K_ACTIVATION_CODE, "");
+                r.remark = obj.optString(K_REMARK, "");
                 records.add(r);
             }
         } catch (Exception e) {
@@ -593,31 +598,62 @@ final class RegRecordManager {
         return result;
     }
 
-    // ==================== Device Remarks ====================
+    // ==================== Device Remarks (存于记录文件, 每条记录带 remark 字段) ====================
 
-    /** 获取设备备注，无备注返回空字符串。 */
-    static String getDeviceRemark(Context ctx, String deviceId) {
-        if (deviceId == null || deviceId.isEmpty()) return "";
-        return ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE)
-                .getString(deviceId, "");
+    private static volatile boolean sRemarkMigrated = false;
+
+    /** 旧版备注存于 SharedPreferences(REMARKS_PREFS)，迁移到记录文件（进程内仅一次）。 */
+    static void migrateRemarksFromPrefs(Context ctx) {
+        if (sRemarkMigrated) return;
+        sRemarkMigrated = true;
+        try {
+            SharedPreferences prefs = ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE);
+            java.util.Map<String, ?> all = prefs.getAll();
+            if (all != null && !all.isEmpty()) {
+                for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+                    Object v = e.getValue();
+                    if (v instanceof String && !((String) v).trim().isEmpty()) {
+                        setDeviceRemark(ctx, e.getKey(), (String) v);
+                    }
+                }
+                prefs.edit().clear().apply();
+                Log.i(TAG, "已迁移设备备注到记录文件");
+            }
+        } catch (Exception ignored) {}
     }
 
-    /** 设置/修改设备备注。备注为空则删除。 */
+    /** 获取设备备注（取该设备首条非空备注），无备注返回空字符串。 */
+    static String getDeviceRemark(Context ctx, String deviceId) {
+        if (deviceId == null || deviceId.isEmpty()) return "";
+        migrateRemarksFromPrefs(ctx);
+        for (Record r : readRecords(ctx)) {
+            if (deviceId.equals(r.deviceId) && r.remark != null && !r.remark.isEmpty()) {
+                return r.remark;
+            }
+        }
+        return "";
+    }
+
+    /** 设置/修改设备备注：写入该设备全部记录的 remark 字段。空字符串即清除。 */
     static void setDeviceRemark(Context ctx, String deviceId, String remark) {
         if (deviceId == null || deviceId.isEmpty()) return;
-        SharedPreferences prefs = ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE);
-        if (remark == null || remark.trim().isEmpty()) {
-            prefs.edit().remove(deviceId).apply();
-        } else {
-            prefs.edit().putString(deviceId, remark.trim()).apply();
+        migrateRemarksFromPrefs(ctx);
+        List<Record> records = readRecords(ctx);
+        String text = (remark == null) ? "" : remark.trim();
+        boolean changed = false;
+        for (Record r : records) {
+            String cur = (r.remark == null) ? "" : r.remark;
+            if (deviceId.equals(r.deviceId) && !cur.equals(text)) {
+                r.remark = text;
+                changed = true;
+            }
         }
+        if (changed) writeRecords(ctx, records);
     }
 
     /** 删除设备备注。 */
     static void deleteDeviceRemark(Context ctx, String deviceId) {
-        if (deviceId == null || deviceId.isEmpty()) return;
-        ctx.getSharedPreferences(REMARKS_PREFS, Context.MODE_PRIVATE)
-                .edit().remove(deviceId).apply();
+        setDeviceRemark(ctx, deviceId, "");
     }
 
     // ==================== I/O ====================
@@ -657,6 +693,7 @@ final class RegRecordManager {
                 obj.put(K_EXPIRY_DATE, r.expiryDate);
                 obj.put(K_REG_AT, r.regAt);
                 obj.put(K_ACTIVATION_CODE, r.activationCode);
+                obj.put(K_REMARK, r.remark != null ? r.remark : "");
                 arr.put(obj);
             }
         } catch (Exception e) {
