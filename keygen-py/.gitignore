@@ -1,0 +1,16 @@
+# uv / Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 私钥文件不要入库
+*.pem
+*.der
+*.key
+
+# 注册记录与本地配置 (含激活码, 敏感)
+reg_records.json
+keygen_config.json
