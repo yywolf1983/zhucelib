@@ -48,8 +48,8 @@ class KeygenApp:
         self.root = root
         self.root.title("RegGate 注册机")
         self.root.configure(bg=BG)
-        self.root.geometry("620x720")
-        self.root.resizable(False, False)
+        self.root.geometry("620x760")
+        self.root.resizable(True, True)
 
         self.private_key = None
         self.private_key_path = None
@@ -59,9 +59,9 @@ class KeygenApp:
 
         self._setup_style()
         self._build_ui()
-        self._refresh_ui_state()
         self._refresh_save_location_label()
         self._load_saved_private_key()
+        self._refresh_ui_state()  # 必须在自动加载私钥后刷新, 否则按钮保持置灰
         records.migrate_config_remarks(self.records_path)
 
     # ---------------- 样式 ----------------
@@ -119,11 +119,11 @@ class KeygenApp:
         tk.Label(header, text="激活码生成工具", bg=PRIMARY, fg=HEADER_FG,
                  font=("TkDefaultFont", 10)).pack(side=tk.LEFT, padx=4, pady=16)
 
-        # 主体（固定窗口, 无滚动条）
+        # 主体（窗口可缩放, 内容随窗口填充）
         body = ttk.Frame(self.root, style="TFrame")
         body.pack(fill=tk.BOTH, expand=True)
         inner = ttk.Frame(body, style="TFrame", padding=(20, 14))
-        inner.pack(fill=tk.X)
+        inner.pack(fill=tk.BOTH, expand=True)
 
         # —— 密钥与存储 ——
         sec = self._section(inner, "密钥与存储")
@@ -169,6 +169,10 @@ class KeygenApp:
         ttk.Label(info_row, text="包名", foreground=MUTED).grid(row=1, column=0, sticky=tk.W, padx=(0, 12), pady=(6, 0))
         self.pkg_label = ttk.Label(info_row, text="-")
         self.pkg_label.grid(row=1, column=1, sticky=tk.W, pady=(6, 0))
+
+        self.device_hint = ttk.Label(sec, text="", foreground=MUTED,
+                                      font=("TkDefaultFont", 9), cursor="")
+        self.device_hint.pack(anchor=tk.W, pady=(8, 0))
 
         # —— 有效天数 ——
         sec = self._section(inner, "有效期")
@@ -273,17 +277,54 @@ class KeygenApp:
         if not raw:
             self.device_id_label.config(text="-", foreground=TEXT)
             self.pkg_label.config(text="-", foreground=TEXT)
+            self._update_device_hint(None)
             return
         ungrouped = reggate.Base32.ungroup(raw)
         parsed = reggate.parse_request_code(ungrouped)
         if parsed is None:
             self.device_id_label.config(text="解析失败", foreground=DANGER)
             self.pkg_label.config(text="-", foreground=TEXT)
+            self._update_device_hint(None)
             return
         device_id, _nonce, pkg_bytes = parsed
-        self.device_id_label.config(text=device_id.hex().upper(), foreground=TEXT)
+        dev_hex = device_id.hex().upper()
+        self.device_id_label.config(text=dev_hex, foreground=TEXT)
         self.pkg_label.config(text=pkg_bytes.decode("utf-8") if pkg_bytes else "(无)",
                               foreground=TEXT)
+        self._update_device_hint(dev_hex)
+
+    def _update_device_hint(self, device_id: str) -> None:
+        """粘贴安装码后只做展示 (不新增记录):
+        已存在 -> 内联展示该设备最近一条记录概览, 可点击查看全部;
+        不存在 -> 提示生成激活码时才会新增。
+        """
+        if not device_id:
+            self.device_hint.config(text="", foreground=MUTED, cursor="")
+            try:
+                self.device_hint.unbind("<Button-1>")
+            except Exception:
+                pass
+            return
+        recs = [r for r in records.RecordStore(self.records_path).load()
+                if r.get("deviceId") == device_id]
+        if recs:
+            latest = max(recs, key=lambda r: r.get("id", 0))
+            pkg = latest.get("packageName") or "(无包名)"
+            dur = latest.get("validDays", 0)
+            dur_txt = "永久" if dur == 0 else f"{dur} 天"
+            summary = f"最近: {pkg} · {dur_txt} · 到期 {latest.get('expiryDate', '')}"
+            self.device_hint.config(
+                text=f"✓ 该设备已存在 (共 {len(recs)} 条) · {summary} · 点击查看",
+                foreground=SUCCESS, cursor="hand2")
+            self.device_hint.bind("<Button-1>",
+                                  lambda _e: self._view_records(device_id))
+        else:
+            self.device_hint.config(text="＋ 新设备 · 生成激活码时将自动新增记录",
+                                    foreground=MUTED, cursor="")
+            try:
+                self.device_hint.unbind("<Button-1>")
+            except Exception:
+                pass
 
     def _generate(self) -> None:
         if self.private_key is None:
@@ -365,8 +406,9 @@ class KeygenApp:
             self.status_var.set("已选择目录, 新建记录文件")
         self._refresh_save_location_label()
 
-    def _view_records(self) -> None:
-        RecordsViewer(self.root, self.records_path, self._refresh_save_location_label)
+    def _view_records(self, device_filter=None) -> None:
+        filt = [device_filter] if device_filter else None
+        RecordsViewer(self.root, self.records_path, self._refresh_save_location_label, filt)
 
     def _copy_device_id(self) -> None:
         txt = self.device_id_label.cget("text")
