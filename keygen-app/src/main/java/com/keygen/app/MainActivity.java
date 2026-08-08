@@ -10,7 +10,12 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
+import android.text.style.BackgroundColorSpan;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -200,16 +205,25 @@ public class MainActivity extends AppCompatActivity {
         try {
             final String code = KeygenUtils.generateActivationCode(requestCode, validDays, privateKey);
 
-            // 从安装码中提取并显示包信息
+            // 从安装码中提取并显示包信息 (包名高亮, 一眼看出归属的 app)
             String deviceIdHex = RegRecordManager.extractDeviceIdHex(requestCode);
             String pkgName = RegRecordManager.extractPackageNameFromRequest(requestCode);
             if (deviceIdHex != null) {
-                StringBuilder info = new StringBuilder();
+                SpannableStringBuilder info = new SpannableStringBuilder();
                 if (pkgName != null && !pkgName.isEmpty()) {
-                    info.append(pkgName).append("  ·  ");
+                    int pkgStart = info.length();
+                    info.append(pkgName);
+                    int pkgEnd = info.length();
+                    info.setSpan(new ForegroundColorSpan(Color.parseColor("#7E22CE")),
+                            pkgStart, pkgEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    info.setSpan(new BackgroundColorSpan(Color.parseColor("#F3E8FF")),
+                            pkgStart, pkgEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    info.setSpan(new StyleSpan(Typeface.BOLD),
+                            pkgStart, pkgEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    info.append("  ·  ");
                 }
                 info.append("设备: ").append(deviceIdHex);
-                tvPackageInfo.setText(info.toString());
+                tvPackageInfo.setText(info);
                 tvPackageInfo.setVisibility(View.VISIBLE);
             } else {
                 tvPackageInfo.setVisibility(View.GONE);
@@ -360,11 +374,13 @@ public class MainActivity extends AppCompatActivity {
     private void refreshDeviceOverview() {
         llDeviceOverview.removeAllViews();
 
-        // 从当前安装码中提取设备 ID
+        // 从当前安装码中提取设备 ID 与包名
         String requestCode = Base32.ungroup(etRequestCode.getText().toString());
         String currentDeviceId = null;
+        String currentPkgName = null;
         if (!TextUtils.isEmpty(requestCode)) {
             currentDeviceId = RegRecordManager.extractDeviceIdHex(requestCode);
+            currentPkgName = RegRecordManager.extractPackageNameFromRequest(requestCode);
         }
 
         if (currentDeviceId == null) {
@@ -385,12 +401,12 @@ public class MainActivity extends AppCompatActivity {
         tvDeviceOverviewSummary.setText(totalPkgs + " 个包 · 共 " + totalRecords + " 条记录");
         tvDeviceOverviewSummary.setVisibility(View.VISIBLE);
 
-        View card = buildDeviceCard(group);
+        View card = buildDeviceCard(group, currentPkgName);
         llDeviceOverview.addView(card);
     }
 
     /** 第一层: 设备卡片 */
-    private View buildDeviceCard(RegRecordManager.DevicePackageGroup group) {
+    private View buildDeviceCard(RegRecordManager.DevicePackageGroup group, String currentPkgName) {
         // 卡片容器
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -461,7 +477,7 @@ public class MainActivity extends AppCompatActivity {
                 pkgContainer.addView(pkgDiv);
             }
             RegRecordManager.PackageGroup pg = group.packageGroups.get(pi);
-            pkgContainer.addView(buildPkgSection(pg));
+            pkgContainer.addView(buildPkgSection(pg, currentPkgName));
         }
 
         // 按钮行
@@ -524,11 +540,15 @@ public class MainActivity extends AppCompatActivity {
         return card;
     }
 
-    /** 第二层: 包名分组，展示该包最新记录摘要 */
-    private View buildPkgSection(RegRecordManager.PackageGroup pkgGroup) {
+    /** 第二层: 包名分组，展示该包最新记录摘要。
+     *  currentPkgName 为当前安装码中提取的包名, 与之匹配的包名才高亮。 */
+    private View buildPkgSection(RegRecordManager.PackageGroup pkgGroup, String currentPkgName) {
         LinearLayout section = new LinearLayout(this);
         section.setOrientation(LinearLayout.VERTICAL);
         section.setPadding(dp(4), dp(4), 0, dp(2));
+
+        // 仅当前安装码所属的包名才高亮
+        boolean highlight = currentPkgName != null && currentPkgName.equals(pkgGroup.packageName);
 
         // 包名行
         LinearLayout pkgRow = new LinearLayout(this);
@@ -538,14 +558,21 @@ public class MainActivity extends AppCompatActivity {
 
         View pkgDot = new View(this);
         pkgDot.setLayoutParams(new LinearLayout.LayoutParams(dp(8), dp(8)));
-        pkgDot.setBackgroundColor(0xFF1976D2);
+        pkgDot.setBackgroundColor(highlight ? 0xFF7E22CE : 0xFF999999);
         pkgRow.addView(pkgDot);
 
         TextView tvPkgName = new TextView(this);
         tvPkgName.setText("  " + pkgGroup.packageName);
         tvPkgName.setTextSize(11);
-        tvPkgName.setTextColor(0xFF555555);
         tvPkgName.setTypeface(Typeface.MONOSPACE);
+        if (highlight) {
+            tvPkgName.setTextColor(0xFF7E22CE);
+            tvPkgName.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+            tvPkgName.setPadding(dp(4), dp(1), dp(4), dp(1));
+            tvPkgName.setBackgroundColor(0xFFF3E8FF);
+        } else {
+            tvPkgName.setTextColor(0xFF555555);
+        }
 
         TextView tvPkgCount = new TextView(this);
         tvPkgCount.setText(" (" + pkgGroup.records.size() + " 次)");
