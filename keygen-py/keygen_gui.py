@@ -57,6 +57,8 @@ class KeygenApp:
 
         self.config = records.load_config()
         self.records_path = self.config.get("records_path", records.DEFAULT_RECORDS_PATH)
+        self.current_pkg = ""
+        self.current_dev = ""
 
         self._setup_style()
         self._build_ui()
@@ -140,7 +142,9 @@ class KeygenApp:
         save_row.pack(fill=tk.X)
         ttk.Button(save_row, text="选择目录…", command=self._choose_save_location,
                    style="Ghost.TButton").pack(side=tk.LEFT)
-        ttk.Button(save_row, text="查看记录", command=self._view_records,
+        ttk.Button(save_row, text="查看记录",
+                   command=lambda: self._view_records(
+                       pkg_highlight=self.current_pkg or None),
                    style="Ghost.TButton").pack(side=tk.LEFT, padx=8)
 
         self.save_label = ttk.Label(sec, text="-", foreground=MUTED,
@@ -176,24 +180,6 @@ class KeygenApp:
         self.device_hint = ttk.Label(sec, text="", foreground=MUTED,
                                       font=("TkDefaultFont", 9), cursor="")
         self.device_hint.pack(anchor=tk.W, pady=(8, 0))
-
-        # —— 设备总览 (当前安装码对应设备的全部记录, 当前注册码包名高亮) ——
-        self.overview_frame = ttk.Frame(sec, style="TFrame")
-        self.overview_frame.pack(fill=tk.X, pady=(10, 0))
-        self.overview_frame.pack_forget()  # 默认隐藏, 有数据时再显示
-
-        self.overview_canvas = tk.Canvas(self.overview_frame, height=170,
-                                         bg=CARD, highlightthickness=0, borderwidth=0)
-        ov_sb = ttk.Scrollbar(self.overview_frame, orient="vertical",
-                              command=self.overview_canvas.yview)
-        self.overview_canvas.configure(yscrollcommand=ov_sb.set)
-        self.overview_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        ov_sb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.overview_inner = ttk.Frame(self.overview_canvas, style="TFrame", padding=(2, 2))
-        self.overview_canvas.create_window((0, 0), window=self.overview_inner, anchor="nw")
-        self.overview_inner.bind("<Configure>",
-                                 lambda _e: self.overview_canvas.configure(
-                                     scrollregion=self.overview_canvas.bbox("all")))
 
         # —— 有效天数 ——
         sec = self._section(inner, "有效期")
@@ -299,7 +285,6 @@ class KeygenApp:
             self.device_id_label.config(text="-", foreground=TEXT)
             self.pkg_label.config(text="-", foreground=TEXT)
             self._update_device_hint(None)
-            self._clear_device_overview()
             return
         ungrouped = reggate.Base32.ungroup(raw)
         parsed = reggate.parse_request_code(ungrouped)
@@ -307,7 +292,6 @@ class KeygenApp:
             self.device_id_label.config(text="解析失败", foreground=DANGER)
             self.pkg_label.config(text="-", foreground=TEXT)
             self._update_device_hint(None)
-            self._clear_device_overview()
             return
         device_id, _nonce, pkg_bytes = parsed
         dev_hex = device_id.hex().upper()
@@ -317,14 +301,14 @@ class KeygenApp:
             self.pkg_label.config(text=current_pkg, foreground=PKG_FG)
         else:
             self.pkg_label.config(text="(无)", foreground=MUTED)
-        self._update_device_hint(dev_hex)
-        self._refresh_device_overview(dev_hex, current_pkg)
+        self._update_device_hint(dev_hex, current_pkg)
 
-    def _update_device_hint(self, device_id: str) -> None:
+    def _update_device_hint(self, device_id: str, current_pkg: str = "") -> None:
         """粘贴安装码后只做展示 (不新增记录):
-        已存在 -> 内联展示该设备最近一条记录概览, 可点击查看全部;
-        不存在 -> 提示生成激活码时才会新增。
-        """
+        已存在 -> 内联展示该设备最近一条记录概览, 可点击查看全部 (并高亮当前包名);
+        不存在 -> 提示生成激活码时才会新增。"""
+        self.current_pkg = current_pkg
+        self.current_dev = device_id or ""
         if not device_id:
             self.device_hint.config(text="", foreground=MUTED, cursor="")
             try:
@@ -344,7 +328,9 @@ class KeygenApp:
                 text=f"✓ 该设备已存在 (共 {len(recs)} 条) · {summary} · 点击查看",
                 foreground=SUCCESS, cursor="hand2")
             self.device_hint.bind("<Button-1>",
-                                  lambda _e: self._view_records(device_id))
+                                  lambda _e: self._view_records(
+                                      device_filter=device_id,
+                                      pkg_highlight=self.current_pkg or None))
         else:
             self.device_hint.config(text="＋ 新设备 · 生成激活码时将自动新增记录",
                                     foreground=MUTED, cursor="")
@@ -352,86 +338,6 @@ class KeygenApp:
                 self.device_hint.unbind("<Button-1>")
             except Exception:
                 pass
-
-    # ---------------- 设备总览 (仿 Android) ----------------
-    def _clear_device_overview(self) -> None:
-        for w in self.overview_inner.winfo_children():
-            w.destroy()
-        self.overview_frame.pack_forget()
-
-    def _refresh_device_overview(self, device_id: str, current_pkg: str) -> None:
-        """展示当前安装码对应设备的全部记录 (按包名分组),
-        并把当前注册码中的包名高亮显示。"""
-        for w in self.overview_inner.winfo_children():
-            w.destroy()
-
-        recs = [r for r in records.RecordStore(self.records_path).load()
-                if r.get("deviceId") == device_id]
-        if not recs:
-            self.overview_frame.pack_forget()
-            return
-
-        # 按包名分组
-        groups: dict = {}
-        for r in recs:
-            groups.setdefault(r.get("packageName") or "", []).append(r)
-        # 当前注册码包名组排最前
-        ordered = sorted(groups.keys(),
-                        key=lambda p: (0 if p == current_pkg else 1, p))
-        # 设备卡头部
-        hdr = ttk.Label(self.overview_inner,
-                        text=f"设备总览 · {device_id} · 共 {len(recs)} 条",
-                        foreground=MUTED, font=("TkDefaultFont", 9, "bold"))
-        hdr.pack(anchor=tk.W, padx=4, pady=(2, 6))
-
-        for pkg in ordered:
-            grp = groups[pkg]
-            highlight = (pkg == current_pkg)
-            self._overview_pkg_block(pkg, grp, highlight)
-
-        self.overview_frame.pack(fill=tk.X, pady=(10, 0))
-        self.overview_canvas.configure(scrollregion=self.overview_canvas.bbox("all"))
-
-    def _overview_pkg_block(self, pkg: str, grp: list, highlight: bool) -> None:
-        """单个包名分组块: 包名行(可高亮) + 该包最新记录摘要。"""
-        block = ttk.Frame(self.overview_inner, style="TFrame",
-                          padding=(8, 6))
-        block.pack(fill=tk.X, pady=(0, 8))
-
-        # 包名行
-        pkg_row = ttk.Frame(block, style="TFrame")
-        pkg_row.pack(fill=tk.X, anchor=tk.W)
-        dot = tk.Label(pkg_row, text="•", fg=(PKG_FG if highlight else "#999999"),
-                       bg=CARD, font=("TkDefaultFont", 11, "bold"))
-        dot.pack(side=tk.LEFT)
-        if highlight:
-            pkg_lbl = ttk.Label(pkg_row, text="  " + (pkg or "(无包名)"),
-                                foreground=PKG_FG, bg="#F3E8FF",
-                                font=("TkDefaultFont", 10, "bold"))
-        else:
-            pkg_lbl = ttk.Label(pkg_row, text="  " + (pkg or "(无包名)"),
-                                foreground="#555555",
-                                font=("TkDefaultFont", 10))
-        pkg_lbl.pack(side=tk.LEFT, padx=(2, 0))
-
-        # 最新记录摘要
-        latest = max(grp, key=lambda r: r.get("id", 0))
-        dur = latest.get("validDays", 0)
-        dur_txt = "永久" if dur == 0 else f"{dur} 天"
-        detail = f"有效期 {dur_txt} · 到期 {latest.get('expiryDate', '')}"
-        remark = latest.get("remark") or ""
-        if remark:
-            detail += f" · 备注 {remark}"
-        act = latest.get("activationCode", "")
-        if act:
-            detail += f" · 激活码 {act[:8]}…" if len(act) > 8 else f" · 激活码 {act}"
-        det_lbl = ttk.Label(block, text=detail, foreground=MUTED,
-                            font=("TkDefaultFont", 9), wraplength=520)
-        det_lbl.pack(anchor=tk.W, padx=(14, 0), pady=(4, 0))
-        reg_at = latest.get("regAt", "")
-        if reg_at:
-            ttk.Label(block, text=f"生成于 {reg_at}", foreground="#94A3B8",
-                      font=("TkDefaultFont", 8)).pack(anchor=tk.W, padx=(14, 0), pady=(2, 0))
 
     def _generate(self) -> None:
         if self.private_key is None:
@@ -513,9 +419,10 @@ class KeygenApp:
             self.status_var.set("已选择目录, 新建记录文件")
         self._refresh_save_location_label()
 
-    def _view_records(self, device_filter=None) -> None:
+    def _view_records(self, device_filter=None, pkg_highlight=None) -> None:
         filt = [device_filter] if device_filter else None
-        RecordsViewer(self.root, self.records_path, self._refresh_save_location_label, filt)
+        RecordsViewer(self.root, self.records_path, self._refresh_save_location_label,
+                      filt, pkg_highlight=pkg_highlight)
 
     def _copy_device_id(self) -> None:
         txt = self.device_id_label.cget("text")
@@ -548,11 +455,13 @@ class RecordsViewer(tk.Toplevel):
     - 详情对话框含激活码展开/收起、删除此条；设备卡片可删除该设备全部。
     """
 
-    def __init__(self, parent, records_path: str, on_changed=None, device_filter=None) -> None:
+    def __init__(self, parent, records_path: str, on_changed=None, device_filter=None,
+                 pkg_highlight=None) -> None:
         super().__init__(parent)
         self.records_path = records_path
         self.on_changed = on_changed
         self.device_filter = set(device_filter) if device_filter else None
+        self.pkg_highlight = pkg_highlight or ""
         self.title("查看记录" if not self.device_filter else "查询记录")
         self.configure(bg=BG)
         self.geometry("720x600")
@@ -736,8 +645,14 @@ class RecordsViewer(tk.Toplevel):
         sec.pack(fill=tk.X, pady=(4, 2))
         hdr = ttk.Frame(sec, style="TFrame")
         hdr.pack(fill=tk.X)
-        tk.Label(hdr, text="●", fg=PKG_FG, bg=BG, font=("TkDefaultFont", 9)).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Label(hdr, text=f"{pkg}  ({len(rec_list)} 次)", font=("Courier", 10)).pack(side=tk.LEFT)
+        highlight = (pkg == self.pkg_highlight) and bool(self.pkg_highlight)
+        if highlight:
+            tk.Label(hdr, text="●", fg=PKG_FG, bg=BG, font=("TkDefaultFont", 9)).pack(side=tk.LEFT, padx=(0, 6))
+            tk.Label(hdr, text=f" {pkg}  ({len(rec_list)} 次)", fg=PKG_FG,
+                     bg="#F3E8FF", font=("Courier", 10, "bold")).pack(side=tk.LEFT)
+        else:
+            tk.Label(hdr, text="●", fg=PKG_FG, bg=BG, font=("TkDefaultFont", 9)).pack(side=tk.LEFT, padx=(0, 6))
+            ttk.Label(hdr, text=f"{pkg}  ({len(rec_list)} 次)", font=("Courier", 10)).pack(side=tk.LEFT)
         for r in rec_list:
             self._build_record(sec, r)
 
