@@ -540,6 +540,19 @@ public class MainActivity extends AppCompatActivity {
         return card;
     }
 
+    /** 判断记录是否已过期 (永久不过期; 否则比较 expiryDate 与今天)。 */
+    private boolean isExpired(RegRecordManager.Record r) {
+        if (r == null || r.validDays == 0) return false;
+        if (r.expiryDate == null || r.expiryDate.isEmpty()) return false;
+        try {
+            java.time.LocalDate exp = java.time.LocalDate.parse(r.expiryDate,
+                    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            return exp.isBefore(java.time.LocalDate.now());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** 第二层: 包名分组，展示该包最新记录摘要。
      *  currentPkgName 为当前安装码中提取的包名, 与之匹配的包名才高亮。 */
     private View buildPkgSection(RegRecordManager.PackageGroup pkgGroup, String currentPkgName) {
@@ -588,7 +601,7 @@ public class MainActivity extends AppCompatActivity {
         String dur = latest.validDays == 0 ? "永久" : latest.validDays + "天";
         tvSummary.setText(dur + " · 到期 " + latest.expiryDate + " · " + latest.regAt);
         tvSummary.setTextSize(10);
-        tvSummary.setTextColor(0xFF388E3C);
+        tvSummary.setTextColor(isExpired(latest) ? 0xFFE53935 : 0xFF388E3C);
         tvSummary.setPadding(dp(16), dp(1), 0, dp(2));
 
         section.addView(pkgRow);
@@ -762,7 +775,7 @@ public class MainActivity extends AppCompatActivity {
                 TextView tvMeta = new TextView(this);
                 tvMeta.setText(dur + "  ·  到期 " + r.expiryDate);
                 tvMeta.setTextSize(10);
-                tvMeta.setTextColor(0xFF43A047);
+                tvMeta.setTextColor(isExpired(r) ? 0xFFE53935 : 0xFF43A047);
                 infoCol.addView(tvMeta);
 
                 recordRow.addView(infoCol);
