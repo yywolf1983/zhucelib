@@ -144,7 +144,8 @@ class KeygenApp:
                    style="Ghost.TButton").pack(side=tk.LEFT)
         ttk.Button(save_row, text="查看记录",
                    command=lambda: self._view_records(
-                       pkg_highlight=self.current_pkg or None),
+                       pkg_highlight=self.current_pkg or None,
+                       device_highlight=self.current_dev or None),
                    style="Ghost.TButton").pack(side=tk.LEFT, padx=8)
 
         self.save_label = ttk.Label(sec, text="-", foreground=MUTED,
@@ -319,18 +320,25 @@ class KeygenApp:
         recs = [r for r in records.RecordStore(self.records_path).load()
                 if r.get("deviceId") == device_id]
         if recs:
-            latest = max(recs, key=lambda r: r.get("id", 0))
-            pkg = latest.get("packageName") or "(无包名)"
-            dur = latest.get("validDays", 0)
-            dur_txt = "永久" if dur == 0 else f"{dur} 天"
-            summary = f"最近: {pkg} · {dur_txt} · 到期 {latest.get('expiryDate', '')}"
-            self.device_hint.config(
-                text=f"✓ 该设备已存在 (共 {len(recs)} 条) · {summary} · 点击查看",
-                foreground=SUCCESS, cursor="hand2")
+            # 取当前注册码包名对应的注册信息
+            pkg_recs = [r for r in recs if (r.get("packageName") or "") == current_pkg] if current_pkg else []
+            if pkg_recs:
+                latest = max(pkg_recs, key=lambda r: r.get("id", 0))
+                dur = latest.get("validDays", 0)
+                dur_txt = "永久" if dur == 0 else f"{dur} 天"
+                info = f"{current_pkg} · {dur_txt} · 到期 {latest.get('expiryDate', '')}"
+                self.device_hint.config(
+                    text=f"✓ 已注册 · {info} · 点击查看",
+                    foreground=SUCCESS, cursor="hand2")
+            else:
+                self.device_hint.config(
+                    text=f"✓ 该设备已存在 (共 {len(recs)} 条) · 未注册 · 点击查看",
+                    foreground=SUCCESS, cursor="hand2")
             self.device_hint.bind("<Button-1>",
                                   lambda _e: self._view_records(
                                       device_filter=device_id,
-                                      pkg_highlight=self.current_pkg or None))
+                                      pkg_highlight=self.current_pkg or None,
+                                      device_highlight=device_id))
         else:
             self.device_hint.config(text="＋ 新设备 · 生成激活码时将自动新增记录",
                                     foreground=MUTED, cursor="")
@@ -419,10 +427,11 @@ class KeygenApp:
             self.status_var.set("已选择目录, 新建记录文件")
         self._refresh_save_location_label()
 
-    def _view_records(self, device_filter=None, pkg_highlight=None) -> None:
+    def _view_records(self, device_filter=None, pkg_highlight=None,
+                      device_highlight=None) -> None:
         filt = [device_filter] if device_filter else None
         RecordsViewer(self.root, self.records_path, self._refresh_save_location_label,
-                      filt, pkg_highlight=pkg_highlight)
+                      filt, pkg_highlight=pkg_highlight, device_highlight=device_highlight)
 
     def _copy_device_id(self) -> None:
         txt = self.device_id_label.cget("text")
@@ -456,12 +465,13 @@ class RecordsViewer(tk.Toplevel):
     """
 
     def __init__(self, parent, records_path: str, on_changed=None, device_filter=None,
-                 pkg_highlight=None) -> None:
+                 pkg_highlight=None, device_highlight=None) -> None:
         super().__init__(parent)
         self.records_path = records_path
         self.on_changed = on_changed
         self.device_filter = set(device_filter) if device_filter else None
         self.pkg_highlight = pkg_highlight or ""
+        self.device_highlight = device_highlight or ""
         self.title("查看记录" if not self.device_filter else "查询记录")
         self.configure(bg=BG)
         self.geometry("720x600")
@@ -645,7 +655,10 @@ class RecordsViewer(tk.Toplevel):
         sec.pack(fill=tk.X, pady=(4, 2))
         hdr = ttk.Frame(sec, style="TFrame")
         hdr.pack(fill=tk.X)
-        highlight = (pkg == self.pkg_highlight) and bool(self.pkg_highlight)
+        # 仅当前安装码所属设备的该包名才高亮 (设备名不同的不亮)
+        same_dev = (self.device_highlight == ""
+                    or any(r.get("deviceId") == self.device_highlight for r in rec_list))
+        highlight = bool(self.pkg_highlight) and pkg == self.pkg_highlight and same_dev
         if highlight:
             tk.Label(hdr, text="●", fg=PKG_FG, bg=BG, font=("TkDefaultFont", 9)).pack(side=tk.LEFT, padx=(0, 6))
             tk.Label(hdr, text=f" {pkg}  ({len(rec_list)} 次)", fg=PKG_FG,
