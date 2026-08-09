@@ -332,7 +332,7 @@ class KeygenApp:
                     foreground=SUCCESS, cursor="hand2")
             else:
                 self.device_hint.config(
-                    text=f"✓ 该设备已存在 (共 {len(recs)} 条) · 未注册 · 点击查看",
+                    text=f"✓ 该设备已存在 (共 {len(recs)} 条) · 当前包未注册 · 点击查看",
                     foreground=SUCCESS, cursor="hand2")
             self.device_hint.bind("<Button-1>",
                                   lambda _e: self._view_records(
