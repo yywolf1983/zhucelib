@@ -36,5 +36,8 @@ Thumbs.db
 build_all.conf
 build_all.sh
 
+# Dist (打包产出)
+dist/
+
 # Logs
 *.log

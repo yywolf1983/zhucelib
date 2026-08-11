@@ -15,11 +15,29 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(HERE, "keygen_config.json")
-DEFAULT_RECORDS_PATH = os.path.join(HERE, "reg_records.json")
+
+def _app_dir() -> str:
+    """可执行文件所在目录。
+
+    打包成单文件 exe (PyInstaller --onefile) 时 __file__ 指向临时解压目录,
+    故优先使用 sys.executable 所在目录, 保证配置稳定落在发布目录下。
+    """
+    exe = getattr(sys, "executable", None)
+    if exe and os.path.isfile(exe):
+        return os.path.dirname(os.path.abspath(exe))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+CONFIG_DIR = os.path.join(_app_dir(), "config")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "keygen_config.json")
+DEFAULT_RECORDS_PATH = os.path.join(CONFIG_DIR, "reg_records.json")
+
+
+def _ensure_config_dir() -> None:
+    os.makedirs(CONFIG_DIR, exist_ok=True)
 
 
 # ===== 配置 (保存位置持久化) =====
@@ -35,6 +53,7 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
+    _ensure_config_dir()
     with open(CONFIG_FILE, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, ensure_ascii=False, indent=2)
 
