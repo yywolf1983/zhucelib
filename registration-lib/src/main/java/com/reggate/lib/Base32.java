@@ -53,7 +53,9 @@ public final class Base32 {
         int bitsLeft = 0;
         int idx = 0;
         for (int i = 0; i < clean.length(); i++) {
-            int v = DECODE_TABLE[clean.charAt(i)];
+            int c = clean.charAt(i);
+            // 表仅覆盖 ASCII (0-127), 越界字符(含 toUpperCase 产生的非 ASCII)按非法处理, 避免越界崩溃
+            int v = (c < 128) ? DECODE_TABLE[c] : -1;
             if (v < 0) return null;
             buffer = (buffer << 5) | v;
             bitsLeft += 5;
