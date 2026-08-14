@@ -72,7 +72,9 @@ final class Base32 {
 
     static String ungroup(String s) {
         if (s == null) return null;
-        return s.replaceAll("[\\s-]", "").toUpperCase();
+        // 去除所有非字母数字字符(含 Unicode 空白/零宽/BOM/换行等不可见字符), 再转大写,
+        // 避免复制粘贴带入肉眼不可见字符导致激活码解析失败
+        return s.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
     }
 
     private static int[] buildDecodeTable() {

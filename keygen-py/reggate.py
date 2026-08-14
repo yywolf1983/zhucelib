@@ -105,7 +105,9 @@ class Base32:
     def ungroup(cls, s: str | None) -> str | None:
         if s is None:
             return None
-        return re.sub(r"[\s-]", "", s).upper()
+        # 去除所有非字母数字字符(含 Unicode 空白/零宽/BOM/换行等不可见字符), 再转大写,
+        # 避免复制粘贴带入肉眼不可见字符导致激活码解析失败
+        return re.sub(r"[^A-Za-z0-9]", "", s).upper()
 
 
 # ===== 密钥流派生 (SHA-256 CTR) =====

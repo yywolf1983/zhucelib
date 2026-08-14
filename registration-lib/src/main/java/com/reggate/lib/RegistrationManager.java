@@ -37,18 +37,28 @@ public final class RegistrationManager {
     private final PrefsManager prefs;
     private final RegGateConfig config;
     private final PublicKey publicKey;
+    private final boolean configValid;
     private final byte[] deviceId;
 
     public RegistrationManager(Context ctx) {
         this.app = ctx.getApplicationContext();
         this.config = RegGateConfig.get();
         this.prefs = new PrefsManager(app);
+        PublicKey pk = null;
         try {
-            this.publicKey = CryptoUtils.parsePublicKey(config.getPublicKeyBase64());
+            pk = CryptoUtils.parsePublicKey(config.getPublicKeyBase64());
         } catch (Exception e) {
-            throw new IllegalStateException("公钥解析失败", e);
+            // 公钥解析失败时降级为"未注册"状态, 而不是让宿主 App 启动即崩溃
+            Log.e(TAG, "公钥解析失败, 注册功能不可用: " + e.getMessage());
         }
+        this.publicKey = pk;
+        this.configValid = (pk != null);
         this.deviceId = DeviceUtils.getDeviceIdBytes(app);
+    }
+
+    /** 配置是否有效(公钥可解析)。返回 false 时所有激活都会失败, 宿主可据此提示配置异常。 */
+    public boolean isConfigValid() {
+        return configValid;
     }
 
     public State getCurrentState() {
@@ -71,6 +81,8 @@ public final class RegistrationManager {
     }
 
     public boolean isLicensed() {
+        // 已激活优先: 与 getCurrentState 一致, 避免已激活用户因时钟微调被误判为未授权
+        if (checkLicensedInternal()) return true;
         if (isTimeTampered()) return false;
         return checkLicensedInternal();
     }
@@ -358,6 +370,9 @@ public final class RegistrationManager {
     // ------------------ 激活码校验 ------------------
 
     public VerifyResult verifyActivationCode(String inputCode) {
+        if (!configValid) {
+            return VerifyResult.invalid("注册配置异常（公钥无效），无法激活，请联系开发者");
+        }
         byte[] nonce = prefs.getPendingNonce();
         if (nonce == null || nonce.length != CryptoUtils.NONCE_LEN) {
             return VerifyResult.invalid("请先获取安装码");
@@ -367,12 +382,20 @@ public final class RegistrationManager {
         CryptoUtils.License lic = CryptoUtils.verifyActivationCode(
                 inputCode, publicKey, deviceId, nonce, pkgBytes);
         if (lic == null) {
+            // 诊断失败原因, 给出更清晰的提示, 避免用户误以为是字符/输入问题
+            int diag = CryptoUtils.diagnoseActivationCode(inputCode, deviceId, nonce);
+            if (diag == 1) {
+                return VerifyResult.invalid("该激活码并非为本设备的安装码生成，请使用对应安装码获取的激活码");
+            } else if (diag == 0) {
+                return VerifyResult.invalid("激活码无效或已过期，请重新生成激活码");
+            }
             return VerifyResult.invalid("激活码无效或与安装码不匹配");
         }
         if (lic.isExpired()) {
             return VerifyResult.invalid("激活码已过期");
         }
-        prefs.saveLicense(inputCode.trim(), nonce, app.getPackageName());
+        // 保存规范化后的激活码(去除不可见字符并大写), 避免持久化带干扰字符的串导致重启后校验失败
+        prefs.saveLicense(Base32.ungroup(inputCode), nonce, app.getPackageName());
         prefs.setPendingNonce(null);
         // 清除异常状态：重置时钟检测基准点，防止之前的时钟回拨标记阻断正常使用
         updateClockCheckpoint();
@@ -389,6 +412,8 @@ public final class RegistrationManager {
      * 检测许可数据是否损坏：已存储激活码但验签失败（可能被篡改或数据损坏）。
      */
     public boolean hasCorruptLicense() {
+        // 配置异常(公钥无效)时无法验签, 不能据此误判为"许可损坏", 否则已激活用户会被强制跳注册页
+        if (!configValid) return false;
         String code = prefs.getActivationCode();
         byte[] nonce = prefs.getLicenseNonce();
         if (code == null || nonce == null) return false;
@@ -418,7 +443,12 @@ public final class RegistrationManager {
     public boolean isTimeTampered() {
         long lastWall = prefs.getLastWallTime();
         if (lastWall == 0L) {
-            updateClockCheckpoint();
+            long now0 = System.currentTimeMillis();
+            // 首启基准容错: 若系统时间明显异常(早于 2020 或晚于 2100 年),
+            // 不作为回拨基准, 避免异常时间被记录后导致后续永久误判为回拨
+            if (now0 >= 1_577_836_800_000L && now0 <= 4_102_444_800_000L) {
+                updateClockCheckpoint();
+            }
             return false;
         }
 

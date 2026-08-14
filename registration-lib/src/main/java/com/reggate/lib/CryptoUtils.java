@@ -196,6 +196,38 @@ final class CryptoUtils {
     }
 
     /**
+     * 诊断激活码校验失败的原因，用于给用户更清晰的提示。
+     * 仅用 deviceId+nonce（不含包名）派生密钥流解乱前 20 字节，
+     * 若该段与本机 deviceId||nonce 一致，说明安装码/设备匹配，问题在激活码本身
+     * （签名错误、过期、被篡改）；否则说明该激活码并非为本设备安装码生成。
+     *
+     * @return 0=匹配(设备/安装码一致) 1=不匹配(激活码对应另一安装码) -1=无法判断(长度/解码失败)
+     */
+    static int diagnoseActivationCode(String activationCode,
+                                      byte[] expectedDeviceId,
+                                      byte[] expectedNonce) {
+        if (activationCode == null || expectedDeviceId == null || expectedNonce == null) return -1;
+        if (expectedDeviceId.length != DEVICE_ID_LEN || expectedNonce.length != NONCE_LEN) return -1;
+        byte[] data = Base32.decode(activationCode);
+        if (data == null) return -1;
+        int expectedLen = VALID_DAYS_LEN + ISSUED_DAY_LEN + SIG_LEN;
+        if (data.length != expectedLen) return -1;
+
+        // 不含包名的密钥流只用于"窥探"前 20 字节的 deviceId||nonce，不影响正式验签
+        byte[] ks = deriveKeystream(expectedDeviceId, expectedNonce, null, data.length);
+        if (ks == null) return -1;
+        byte[] probe = data.clone();
+        xorScramble(probe, ks);
+
+        byte[] head = new byte[DEVICE_ID_LEN + NONCE_LEN];
+        System.arraycopy(probe, 0, head, 0, head.length);
+        byte[] expectedHead = new byte[DEVICE_ID_LEN + NONCE_LEN];
+        System.arraycopy(expectedDeviceId, 0, expectedHead, 0, DEVICE_ID_LEN);
+        System.arraycopy(expectedNonce, 0, expectedHead, DEVICE_ID_LEN, NONCE_LEN);
+        return Arrays.equals(head, expectedHead) ? 0 : 1;
+    }
+
+    /**
      * 构建签名消息。若 pkgBytes 非空则包含包名以实现包级绑定。
      */
     static byte[] buildSignedMessage(byte[] deviceId, byte[] nonce, byte[] pkgBytes,
