@@ -65,6 +65,7 @@ public final class RegistrationManager {
         // 始终先检查许可: 持有有效许可的用户不应因时钟回拨检测而被阻挡
         if (checkLicensedInternal()) return State.LICENSED;
 
+        // 时钟回拨检测当前已关闭(isTimeTampered 恒返回 false),此分支保留供将来启用。
         if (isTimeTampered()) {
             Log.w(TAG, "检测到系统时钟回拨, 无有效许可, 强制判定为已过期");
             return State.EXPIRED;
@@ -81,9 +82,6 @@ public final class RegistrationManager {
     }
 
     public boolean isLicensed() {
-        // 已激活优先: 与 getCurrentState 一致, 避免已激活用户因时钟微调被误判为未授权
-        if (checkLicensedInternal()) return true;
-        if (isTimeTampered()) return false;
         return checkLicensedInternal();
     }
 
@@ -136,7 +134,19 @@ public final class RegistrationManager {
         appContext.registerActivityLifecycleCallbacks(new RegGateActivityCallbacks(this));
     }
 
-    void enforceRegistration(android.app.Activity activity) {
+    /** 自动启用生命周期守卫(带 Application 去重,避免 build 与宿主手动调用重复注册)。 */
+    public static void autoInstallGuard(android.app.Application appContext) {
+        if (appContext == null) return;
+        if (GUARD_INSTALLED.containsKey(appContext)) return;
+        RegistrationManager mgr = new RegistrationManager(appContext);
+        mgr.installLifecycleGuard(appContext);
+        GUARD_INSTALLED.put(appContext, Boolean.TRUE);
+    }
+
+    private static final java.util.WeakHashMap<android.app.Application, Boolean> GUARD_INSTALLED =
+            new java.util.WeakHashMap<>();
+
+    public void enforceRegistration(android.app.Activity activity) {
         Class<?> cls = activity.getClass();
         if (cls == RegistrationGateActivity.class
                 || cls == RegistrationActivity.class
@@ -152,7 +162,10 @@ public final class RegistrationManager {
         }
 
         State state = getCurrentState();
-        if (state == State.LICENSED || state == State.TRIALING) {
+        if (state == State.LICENSED) {
+            return; // 已授权,不弹试用框
+        }
+        if (state == State.TRIALING) {
             ensureFirstLaunchRecorded();
             handleTrialDialogOnFirstLaunch(activity);
             return;
@@ -173,15 +186,28 @@ public final class RegistrationManager {
         startRegistrationActivity(activity, false);
     }
 
+    /** 直接进入注册界面(忽略状态机与试用框),供宿主 app 主动发起注册。 */
+    public void startRegistration(android.app.Activity activity) {
+        Class<?> cls = activity.getClass();
+        if (cls == RegistrationGateActivity.class
+                || cls == RegistrationActivity.class
+                || cls == TrialDialogActivity.class
+                || cls == ExpiredNagActivity.class) {
+            return;
+        }
+        startRegistrationActivity(activity, false);
+    }
+
     private void handleTrialDialogOnFirstLaunch(android.app.Activity activity) {
         if (isLicensed()) return;
         RegGateConfig.PromptTiming timing = getEffectivePromptTiming();
-        boolean needDialog = timing == RegGateConfig.PromptTiming.FIRST_LAUNCH && !isTrialDialogShown()
-                || timing == RegGateConfig.PromptTiming.EVERY_LAUNCH;
-        if (!needDialog) return;
+        if (!shouldShowTrialDialog(timing)) return;
 
         if (timing == RegGateConfig.PromptTiming.FIRST_LAUNCH) {
             markTrialDialogShown();
+        } else if (timing == RegGateConfig.PromptTiming.INTERVAL_DAYS) {
+            // 记录本次弹框时间,作为下次间隔基准
+            markTrialPromptNow();
         }
 
         Intent it = new Intent(activity, TrialDialogActivity.class);
@@ -190,6 +216,40 @@ public final class RegistrationManager {
         it.putExtra(TrialDialogActivity.EXTRA_REMAINING_DAYS, getTrialRemainingDays());
         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         activity.startActivity(it);
+    }
+
+    /**
+     * 判断当前是否需要弹出试用框。
+     *   - FIRST_LAUNCH: 仅首次启动弹一次(用 isTrialDialogShown 去重)
+     *   - EVERY_LAUNCH: 每次都弹
+     *   - INTERVAL_DAYS: 首次试用不弹,之后每隔 trialPromptIntervalDays 天弹一次
+     *   - 其它模式(ON_EXPIRY 等): 不弹(由到期流程处理)
+     */
+    boolean shouldShowTrialDialog(RegGateConfig.PromptTiming timing) {
+        switch (timing) {
+            case FIRST_LAUNCH:
+                return !isTrialDialogShown();
+            case EVERY_LAUNCH:
+                return true;
+            case INTERVAL_DAYS: {
+                long last = prefs.getLastTrialPromptMs();
+                if (last == 0L) {
+                    // 首次试用:不弹窗,但记录基准时间,从今天起间隔 N 天后弹
+                    prefs.setLastTrialPromptMs(System.currentTimeMillis());
+                    return false;
+                }
+                long intervalMs = Math.max(1, getEffectiveTrialIntervalDays()) * DAY_MS;
+                return (System.currentTimeMillis() - last) >= intervalMs;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /** INTERVAL_DAYS 模式的弹框间隔天数(>=1)。 */
+    public int getEffectiveTrialIntervalDays() {
+        int d = config.getTrialPromptIntervalDays();
+        return d > 0 ? d : 7;
     }
 
     private void startRegistrationActivity(android.app.Activity activity, boolean expired) {
@@ -439,40 +499,12 @@ public final class RegistrationManager {
      * 原理：{@link SystemClock#elapsedRealtime()} 从开机算起只增不减，
      * 与 {@link System#currentTimeMillis()} 交叉比对，若 wall clock
      * 在 realtime 持续增长时反而倒退，则判定为时钟被回拨。
+     *
+     * 注意：按需求已关闭时钟回拨限制，修改系统时间不再拦截用户。
+     * 这里恒定返回 false，使 isAnomaly() 仅保留许可损坏检测。
      */
     public boolean isTimeTampered() {
-        long lastWall = prefs.getLastWallTime();
-        if (lastWall == 0L) {
-            long now0 = System.currentTimeMillis();
-            // 首启基准容错: 若系统时间明显异常(早于 2020 或晚于 2100 年),
-            // 不作为回拨基准, 避免异常时间被记录后导致后续永久误判为回拨
-            if (now0 >= 1_577_836_800_000L && now0 <= 4_102_444_800_000L) {
-                updateClockCheckpoint();
-            }
-            return false;
-        }
-
-        long now = System.currentTimeMillis();
-        long nowReal = SystemClock.elapsedRealtime();
-        long lastReal = prefs.getLastRealTime();
-        long realDelta = nowReal - lastReal;
-
-        if (realDelta >= 0) {
-            // 未重启：realtime 正常递增，wall clock 不应倒退
-            if (now < lastWall - CLOCK_TOLERANCE_MS) {
-                Log.w(TAG, "时钟回拨检测: wall=" + now + " < lastWall=" + lastWall
-                        + ", realDelta=" + realDelta + "ms");
-                return true;
-            }
-        } else {
-            // 设备重启后 realtime 归零。仅检查 wall clock 是否倒退。
-            if (now < lastWall - CLOCK_TOLERANCE_MS) {
-                Log.w(TAG, "时钟回拨检测(重启后): wall=" + now + " < lastWall=" + lastWall);
-                return true;
-            }
-        }
-
-        updateClockCheckpoint();
+        // 已取消时钟回拨限制：让用户修改系统时间不受阻。
         return false;
     }
 
@@ -525,6 +557,12 @@ public final class RegistrationManager {
 
     public boolean isTrialDialogShown() { return prefs.isTrialDialogShown(); }
     public void markTrialDialogShown() { prefs.markTrialDialogShown(); }
+
+    /** 记录本次 INTERVAL_DAYS 试用框的弹出时间(作为下次间隔基准)。 */
+    public void markTrialPromptNow() { prefs.setLastTrialPromptMs(System.currentTimeMillis()); }
+
+    /** 上次弹出 INTERVAL_DAYS 试用框的墙钟时间(ms),0 表示从未弹过。 */
+    public long getLastTrialPromptMs() { return prefs.getLastTrialPromptMs(); }
 
     public RegGateConfig getConfig() { return config; }
     public byte[] getDeviceId() { return deviceId; }

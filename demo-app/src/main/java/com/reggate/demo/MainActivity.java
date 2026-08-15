@@ -10,7 +10,8 @@ import com.reggate.lib.RegistrationManager;
 
 /**
  * Demo 主界面：仅展示注册状态，不包含任何注册机交互。
- * 所有注册逻辑由注册库自动完成（试用框、激活界面等）。
+ * 所有注册逻辑由注册库自动完成（试用框、激活界面、注册入口按钮等）。
+ * 右下角的注册入口由库在生命周期中自动挂载到本 Activity,无需本类编写任何 UI 代码。
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -66,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateLimits() {
         StringBuilder sb = new StringBuilder();
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd",
+                java.util.Locale.getDefault());
         sb.append("试用天数: ");
         int trialDays = manager.getEffectiveTrialDays();
         if (trialDays == 0) {
@@ -80,6 +83,8 @@ public class MainActivity extends AppCompatActivity {
             sb.append("首次启动");
         } else if (timing == RegGateConfig.PromptTiming.ON_EXPIRY) {
             sb.append("到期后");
+        } else if (timing == RegGateConfig.PromptTiming.INTERVAL_DAYS) {
+            sb.append("间隔 ").append(manager.getEffectiveTrialIntervalDays()).append(" 天(首次不弹)");
         } else {
             sb.append("每次启动");
         }
@@ -94,13 +99,20 @@ public class MainActivity extends AppCompatActivity {
 
         long first = manager.getFirstLaunchMs();
         if (first > 0) {
-            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd",
-                    java.util.Locale.getDefault());
             sb.append("\n首次启动: ").append(sdf.format(new java.util.Date(first)));
         }
 
+        if (timing == RegGateConfig.PromptTiming.INTERVAL_DAYS) {
+            long lastPrompt = manager.getLastTrialPromptMs();
+            if (lastPrompt > 0) {
+                sb.append("\n上次弹窗: ").append(sdf.format(new java.util.Date(lastPrompt)));
+            } else {
+                sb.append("\n上次弹窗: 从未(首次试用不弹)");
+            }
+        }
+
         boolean tampered = manager.isTimeTampered();
-        sb.append("\n时钟回拨: ").append(tampered ? "检测到异常" : "正常");
+        sb.append("\n时钟检查: ").append(tampered ? "已开启" : "已关闭(允许改系统时间)");
         tvLimits.setText(sb.toString());
     }
 }

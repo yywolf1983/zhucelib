@@ -16,6 +16,7 @@ final class PrefsManager {
     private static final String KEY_LICENSE_PACKAGE = "license_package";
     private static final String KEY_PENDING_NONCE = "pending_nonce";
     private static final String KEY_TRIAL_DIALOG_SHOWN = "trial_dialog_shown";
+    private static final String KEY_LAST_TRIAL_PROMPT_MS = "last_trial_prompt_ms";
     private static final String KEY_LAST_WALL_TIME = "last_wall_time";
     private static final String KEY_LAST_REAL_TIME = "last_real_time";
 
@@ -81,6 +82,11 @@ final class PrefsManager {
     boolean isTrialDialogShown() { return sp.getBoolean(KEY_TRIAL_DIALOG_SHOWN, false); }
 
     void markTrialDialogShown() { sp.edit().putBoolean(KEY_TRIAL_DIALOG_SHOWN, true).apply(); }
+
+    /** 上次弹出 INTERVAL_DAYS 试用框的墙钟时间(ms),0 表示从未弹过。 */
+    long getLastTrialPromptMs() { return sp.getLong(KEY_LAST_TRIAL_PROMPT_MS, 0L); }
+
+    void setLastTrialPromptMs(long ms) { sp.edit().putLong(KEY_LAST_TRIAL_PROMPT_MS, ms).apply(); }
 
     // ------------------ 单调时钟交叉验证(防系统时钟回拨) ------------------
 

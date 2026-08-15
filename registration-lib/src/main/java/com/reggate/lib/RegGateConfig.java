@@ -42,6 +42,11 @@ public final class RegGateConfig {
         ON_EXPIRY,
         /** 每次启动都弹出注册框(适用于严格限制场景)。 */
         EVERY_LAUNCH,
+        /**
+         * 间隔模式:首次试用不弹窗,之后每隔 {@link #trialPromptIntervalDays} 天弹一次试用框。
+         * 仅在试用期(TRIALING)内生效,过期或到期后的弹窗行为由 ExpireBehavior 决定。
+         */
+        INTERVAL_DAYS,
     }
 
     /** 到期后(试用或购买时长结束)的行为。 */
@@ -65,6 +70,8 @@ public final class RegGateConfig {
     private static final PromptTiming DEFAULT_PROMPT_TIMING = PromptTiming.EVERY_LAUNCH;
     private static final ExpireBehavior DEFAULT_EXPIRE_BEHAVIOR = ExpireBehavior.BLOCK;
     private static final long DEFAULT_FIRST_TRIAL_DELAY_MS = 0L;
+    /** INTERVAL_DAYS 模式下的默认弹框间隔(天)。 */
+    private static final int DEFAULT_TRIAL_PROMPT_INTERVAL_DAYS = 7;
 
     private static volatile ConfigHolder holder;
     private static volatile String defaultPublicKey = null;
@@ -75,6 +82,7 @@ public final class RegGateConfig {
     private final PromptTiming promptTiming;
     private final ExpireBehavior expireBehavior;
     private final long firstTrialDialogDelayMs;
+    private final int trialPromptIntervalDays;
     private final String appName;
     private final ContactInfo contactInfo;
 
@@ -85,6 +93,7 @@ public final class RegGateConfig {
         this.promptTiming = b.promptTiming;
         this.expireBehavior = b.expireBehavior;
         this.firstTrialDialogDelayMs = b.firstTrialDialogDelayMs;
+        this.trialPromptIntervalDays = b.trialPromptIntervalDays;
         this.appName = b.appName;
         this.contactInfo = b.contactInfo;
     }
@@ -150,6 +159,8 @@ public final class RegGateConfig {
     public PromptTiming getPromptTiming() { return promptTiming; }
     public ExpireBehavior getExpireBehavior() { return expireBehavior; }
     public long getFirstTrialDialogDelayMs() { return firstTrialDialogDelayMs; }
+    /** INTERVAL_DAYS 模式下两次试用弹框之间的最小间隔天数(>=1)。 */
+    public int getTrialPromptIntervalDays() { return trialPromptIntervalDays; }
     public String getAppName() { return appName; }
 
     public long getTrialDurationMs() {
@@ -177,6 +188,7 @@ public final class RegGateConfig {
         private PromptTiming promptTiming = DEFAULT_PROMPT_TIMING;
         private ExpireBehavior expireBehavior = DEFAULT_EXPIRE_BEHAVIOR;
         private long firstTrialDialogDelayMs = DEFAULT_FIRST_TRIAL_DELAY_MS;
+        private int trialPromptIntervalDays = DEFAULT_TRIAL_PROMPT_INTERVAL_DAYS;
         private String appName;
         private ContactInfo contactInfo;
 
@@ -184,6 +196,7 @@ public final class RegGateConfig {
         private boolean promptTimingSet = false;
         private boolean expireBehaviorSet = false;
         private boolean firstTrialDialogDelayMsSet = false;
+        private boolean trialPromptIntervalDaysSet = false;
         private boolean appNameSet = false;
         private boolean contactInfoSet = false;
         private boolean configLoaded = false;
@@ -226,6 +239,13 @@ public final class RegGateConfig {
             return this;
         }
 
+        /** 设置 INTERVAL_DAYS 模式下两次试用弹框间隔天数(<=0 时回退为默认 7 天)。 */
+        public Builder trialPromptIntervalDays(int days) {
+            this.trialPromptIntervalDays = days > 0 ? days : DEFAULT_TRIAL_PROMPT_INTERVAL_DAYS;
+            this.trialPromptIntervalDaysSet = true;
+            return this;
+        }
+
         public Builder appName(String name) {
             this.appName = name;
             this.appNameSet = true;
@@ -255,6 +275,9 @@ public final class RegGateConfig {
             }
             if (!firstTrialDialogDelayMsSet) {
                 this.firstTrialDialogDelayMs = RegGateConfigLoader.getLong(config, "first_trial_delay_ms", DEFAULT_FIRST_TRIAL_DELAY_MS);
+            }
+            if (!trialPromptIntervalDaysSet) {
+                this.trialPromptIntervalDays = RegGateConfigLoader.getInt(config, "trial_prompt_interval_days", DEFAULT_TRIAL_PROMPT_INTERVAL_DAYS);
             }
             if (!appNameSet) {
                 String configAppName = RegGateConfigLoader.getString(config, "app_name", "");
@@ -305,6 +328,13 @@ public final class RegGateConfig {
             }
 
             holder = new ConfigHolder(new RegGateConfig(this));
+
+            // 自动启用生命周期守卫,使注册入口按钮与状态校验成为库的固有功能:
+            // 任何正确 init 并 build 的 app 都会自动生效,无需宿主额外调用 installLifecycleGuard。
+            if (context != null) {
+                android.app.Application app = (android.app.Application) context.getApplicationContext();
+                RegistrationManager.autoInstallGuard(app);
+            }
         }
     }
 }

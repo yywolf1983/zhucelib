@@ -102,6 +102,18 @@ RegGateConfig.init(this)
     .build();
 ```
 
+#### INTERVAL_DAYS 间隔弹窗模式
+
+`INTERVAL_DAYS` 模式：**首次试用不弹窗**，之后每隔 `trialPromptIntervalDays`（默认 7 天）弹一次试用框。仅在试用期（TRIALING）内生效，过期后由 `expireBehavior` 决定行为。
+
+```java
+RegGateConfig.init(this)
+    .mainActivity(MainActivity.class)
+    .promptTiming(RegGateConfig.PromptTiming.INTERVAL_DAYS)  // 间隔弹窗模式
+    .trialPromptIntervalDays(10)                              // 每 10 天弹一次（默认 7）
+    .build();
+```
+
 ## 可选功能
 
 ### 使用配置文件
@@ -120,6 +132,7 @@ RegGateConfig.init(this)
     "prompt_timing": "EVERY_LAUNCH",
     "expire_behavior": "BLOCK",
     "first_trial_delay_ms": 0,
+    "trial_prompt_interval_days": 7,
     "contact": {
         "phone": "13800138000",
         "email": "support@example.com",
@@ -136,9 +149,10 @@ RegGateConfig.init(this)
 | 配置项 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `trial_days` | int | 7 | 试用天数，0 表示不提供试用 |
-| `prompt_timing` | string | EVERY_LAUNCH | 弹框时机：FIRST_LAUNCH / ON_EXPIRY / EVERY_LAUNCH |
+| `prompt_timing` | string | EVERY_LAUNCH | 弹框时机：FIRST_LAUNCH / ON_EXPIRY / EVERY_LAUNCH / INTERVAL_DAYS |
 | `expire_behavior` | string | BLOCK | 到期行为：BLOCK / NAG_ONLY |
 | `first_trial_delay_ms` | long | 0 | 首次弹框延迟（毫秒） |
+| `trial_prompt_interval_days` | int | 7 | 仅 `INTERVAL_DAYS` 模式生效：首次试用不弹窗，之后每隔该天数弹一次试用框（<=0 回退为 7） |
 | `contact.phone` | string | 空 | 联系电话（点击拨打电话，支持复制） |
 | `contact.email` | string | 空 | 联系邮箱（点击发送邮件，支持复制） |
 | `contact.website` | string | 空 | 联系网址（点击打开浏览器，支持复制） |
@@ -334,6 +348,7 @@ public void doPremiumFeature() {
 | 公钥 | `res/raw/reggate_pub_key.txt` | 编译时内置 |
 | 试用天数 | 7 天 | 0=不提供试用 |
 | 弹框时机 | EVERY_LAUNCH | 每次启动都弹框 |
+| 间隔弹窗天数 | 7 天 | 仅 INTERVAL_DAYS 模式生效 |
 | 到期行为 | BLOCK | 到期后限制功能 |
 | 应用名称 | "本应用" | UI 展示名称 |
 | 联系电话 | `13800138000` | 注册页面显示的联系方式 |
@@ -355,6 +370,7 @@ RegistrationGateActivity（注册入口）
     ├─ TRIALING（试用中）
     │   ├─ promptTiming = FIRST_LAUNCH → 首次启动弹试用框
     │   ├─ promptTiming = EVERY_LAUNCH → 每次启动弹试用框
+    │   ├─ promptTiming = INTERVAL_DAYS → 首次不弹，之后每 N 天弹一次
     │   └─ promptTiming = ON_EXPIRY → 直接进入主界面
     │
     └─ EXPIRED / NEED_REGISTER
@@ -412,6 +428,7 @@ cp -r "$REG_LIB_SRC"/* "$MERGED_RES_DIR/"
 3. **设备绑定**：激活码与设备指纹绑定，换机需重新激活
 4. **试用重置**：清除 App 数据可重置试用期
 5. **资源更新**：修改注册库资源后，重新编译应用即可自动获取最新资源
+6. **时钟回拨**：已关闭系统时间篡改检测，修改设备系统时间不会被拦截（许可激活码本身仍按设备指纹校验）
 
 ## 常见问题
 

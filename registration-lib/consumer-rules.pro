@@ -11,6 +11,8 @@
 -keep class com.reggate.lib.RegistrationActivity { *; }
 -keep class com.reggate.lib.TrialDialogActivity { *; }
 -keep class com.reggate.lib.ExpiredNagActivity { *; }
+# 自定义悬浮注册入口 View(宿主 XML 以全限定名引用,混淆会致引用失败)
+-keep class com.reggate.lib.RegGateRegisterButton { *; }
 -keep class com.reggate.lib.RegistrationManager$VerifyResult { *; }
 -keep class com.reggate.lib.RegGateConfig$PromptTiming { *; }
 -keep class com.reggate.lib.RegGateConfig$ExpireBehavior { *; }

@@ -27,7 +27,8 @@ public class RegGateConfigLoader {
 
         if (config == null) {
             config = createDefaultConfig();
-            Log.d("RegGateConfigLoader", "使用默认配置");
+            Log.e("RegGateConfigLoader", "未能加载外部配置 reagate_config.dat,已回退到宽松默认(NAG_ONLY,不锁死)。"
+                    + "请确认配置已正确编译进库,否则注册策略非预期。");
         }
 
         return config;
@@ -67,8 +68,10 @@ public class RegGateConfigLoader {
             JSONObject config = new JSONObject();
             config.put("trial_days", 7);
             config.put("prompt_timing", "EVERY_LAUNCH");
-            config.put("expire_behavior", "BLOCK");
+            // 兜底默认使用 NAG_ONLY(仅提示、不锁死),避免配置缺失时静默锁死用户。
+            config.put("expire_behavior", "NAG_ONLY");
             config.put("first_trial_delay_ms", 0);
+            config.put("trial_prompt_interval_days", 7);
 
             JSONObject contact = new JSONObject();
             contact.put("phone", "13800138000");

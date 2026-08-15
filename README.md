@@ -115,7 +115,8 @@ public class MyApplication extends Application {
 |---|---|---|---|
 | `mainActivity()` | Class<?> | 无(必填) | 注册通过后跳转的主界面 |
 | `trialDays()` | int | 7 | 试用期天数,0=不试用 |
-| `promptTiming()` | PromptTiming | EVERY_LAUNCH | 注册框弹出时机 |
+| `promptTiming()` | PromptTiming | EVERY_LAUNCH | 注册框弹出时机：FIRST_LAUNCH / ON_EXPIRY / EVERY_LAUNCH / INTERVAL_DAYS |
+| `trialPromptIntervalDays()` | int | 7 | 仅 INTERVAL_DAYS 模式生效：首次试用不弹窗，之后每 N 天弹一次 |
 | `expireBehavior()` | ExpireBehavior | BLOCK | 到期后行为 |
 | `appName()` | String | "本应用" | 应用名称(UI展示) |
 

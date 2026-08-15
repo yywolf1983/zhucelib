@@ -52,13 +52,18 @@ public class RegistrationGateActivity extends Activity {
 
     private void handleTrialing() {
         RegGateConfig.PromptTiming timing = manager.getConfig().getPromptTiming();
-        boolean needDialog = timing == RegGateConfig.PromptTiming.FIRST_LAUNCH
-                && !manager.isTrialDialogShown()
-                || timing == RegGateConfig.PromptTiming.EVERY_LAUNCH;
+        boolean needDialog = manager.shouldShowTrialDialog(timing);
 
         if (!needDialog) {
             launchMain();
             return;
+        }
+
+        if (timing == RegGateConfig.PromptTiming.FIRST_LAUNCH) {
+            manager.markTrialDialogShown();
+        } else if (timing == RegGateConfig.PromptTiming.INTERVAL_DAYS) {
+            // 记录本次弹框时间,作为下次间隔基准
+            manager.markTrialPromptNow();
         }
 
         final long delayMs = manager.getConfig().getFirstTrialDialogDelayMs();
