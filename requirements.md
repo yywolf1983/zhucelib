@@ -37,6 +37,7 @@
 | `FIRST_LAUNCH` | 首次启动弹出注册/试用框 |
 | `ON_EXPIRY` | 到期后弹出注册框 |
 | `EVERY_LAUNCH` | 每次启动都弹出注册/试用框 |
+| `INTERVAL_DAYS` | 首次试用不弹窗，之后每隔 `trialPromptIntervalDays` 天弹一次（<=0 回退为 7） |
 
 ### 2.4 到期后行为
 
@@ -57,13 +58,11 @@
 
 ### 2.6 试用配置
 
-试用配置（试用天数、弹框时机、到期行为）写死在注册库中：
+试用配置（试用天数、弹框时机、到期行为）由注册库在**编译期**从外部 `reggate_config.json` 加密进 `reggate_config.dat`，随 AAR 内置：
 
-- 默认试用 7 天
-- 默认每次启动弹框
-- 默认到期限制功能
-
-宿主可通过 `RegGateConfig` 覆盖默认配置。
+- 外部明文配置位于 `$REGGATE_CONFIG_DIR/reggate_config.json`（默认 `/Users/yy/pro-test/anddex-config/`），编译时自动加密为 `registration-lib/src/main/assets/reggate_config.dat`，**app 不写死、无法篡改**。
+- 库内置兜底默认：`NAG_ONLY`（到期仅提示，不阻断），避免加载失败导致硬锁。
+- 宿主**不应**自行写死策略参数，`RegGateConfig.loadFromConfig()` 读取库内置配置即可。
 
 ### 2.7 注册码易于输入
 
@@ -73,15 +72,14 @@
 
 ### 2.8 简单加入与剥离
 
-**加入**(3 处改动):
+**加入**(2 处改动):
 1. 引入 `registration-lib` 依赖
-2. Application 中调用 `RegGateConfig.init().mainActivity().build()`
-3. 调用 `new RegistrationManager(this).installLifecycleGuard(this)`
-4. Manifest 把启动入口改为 `RegistrationGateActivity`
+2. Application 中调用 `RegGateConfig.init(this).mainActivity(MainActivity.class).loadFromConfig().build()`（生命周期守卫与注册入口按钮在 `build()` 内自动安装，无需手动 `installLifecycleGuard`）
+3. Manifest 把启动入口改为 `RegistrationGateActivity`
 
 **剥离**(反向操作):
 1. 移除依赖
-2. 移除 `RegGateConfig.init()` 和 `installLifecycleGuard()` 调用
+2. 移除 `RegGateConfig.init()` 调用（守卫与按钮随依赖移除自动失效）
 3. Manifest 改回原启动 Activity
 
 ### 2.9 注册机特性

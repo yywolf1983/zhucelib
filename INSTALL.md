@@ -62,9 +62,8 @@ public class MyApplication extends Application {
         RegGateConfig.init(this)
             .mainActivity(MainActivity.class)  // 必填：注册通过后跳转的主界面
             .build();
-        
-        // 安装生命周期守卫（每次 Activity 启动时校验）
-        new RegistrationManager(this).installLifecycleGuard(this);
+        // 注：生命周期守卫与注册入口按钮会在 build() 内自动安装（autoInstallGuard），
+        // 无需（也建议不要）再手动调用 installLifecycleGuard。
     }
 }
 ```
@@ -122,7 +121,7 @@ RegGateConfig.init(this)
 
 #### 配置文件格式
 
-配置文件为加密格式（XOR 加密），文件名：`reggate_config.dat`
+配置文件为加密格式（AES-256-GCM 加密），文件名：`reggate_config.dat`
 
 原始 JSON 格式如下：
 
@@ -130,7 +129,7 @@ RegGateConfig.init(this)
 {
     "trial_days": 7,
     "prompt_timing": "EVERY_LAUNCH",
-    "expire_behavior": "BLOCK",
+    "expire_behavior": "NAG_ONLY",
     "first_trial_delay_ms": 0,
     "trial_prompt_interval_days": 7,
     "contact": {
@@ -150,7 +149,7 @@ RegGateConfig.init(this)
 |---|---|---|---|
 | `trial_days` | int | 7 | 试用天数，0 表示不提供试用 |
 | `prompt_timing` | string | EVERY_LAUNCH | 弹框时机：FIRST_LAUNCH / ON_EXPIRY / EVERY_LAUNCH / INTERVAL_DAYS |
-| `expire_behavior` | string | BLOCK | 到期行为：BLOCK / NAG_ONLY |
+| `expire_behavior` | string | NAG_ONLY | 到期行为：BLOCK / NAG_ONLY |
 | `first_trial_delay_ms` | long | 0 | 首次弹框延迟（毫秒） |
 | `trial_prompt_interval_days` | int | 7 | 仅 `INTERVAL_DAYS` 模式生效：首次试用不弹窗，之后每隔该天数弹一次试用框（<=0 回退为 7） |
 | `contact.phone` | string | 空 | 联系电话（点击拨打电话，支持复制） |
@@ -175,9 +174,10 @@ RegGateConfig.init(this)
    - 将外部明文配置加密后放入 `registration-lib/src/main/assets/reggate_config.dat`
    - 加密算法：AES-256-GCM + SHA-256 密钥派生
 
-3. **加密脚本**：
-   - 位置：`anddex/scripts/EncryptConfig.java`
-   - 使用 Java 实现，确保与 Android 端解密算法一致
+3. **加密实现**：
+   - 定义于 `registration-lib/build.gradle` 的 `encryptConfig` Gradle 任务（`preBuild.dependsOn encryptConfig`，每次编译前自动执行）。
+   - `MASTER_KEY = "RegGateLib2024KeyyNonesTopAppKey"`（硬编码于该任务），`key = SHA-256(MASTER_KEY)` 派生 AES-256 密钥，随机 12 字节 IV 拼接在密文前。
+   - 无独立加密脚本；如需手动触发：`./gradlew :registration-lib:encryptConfig`。
 
 ##### 自定义配置目录
 
@@ -241,14 +241,14 @@ RegGateConfig.init(this)
 
 #### 配置文件放置位置
 
-- **应用配置文件**：`app/src/main/assets/reggate_config.json`
-- **库默认配置文件**：`registration-lib/src/main/assets/reggate_config.json`
+- **外部明文配置（编译期输入）**：`$REGGATE_CONFIG_DIR/reggate_config.json`（默认 `/Users/yy/pro-test/anddex-config/reggate_config.json`），仅在项目之外编辑，不进入仓库。
+- **库内置加密配置（运行时读取）**：`registration-lib/src/main/assets/reggate_config.dat`，由 `encryptConfig` Gradle 任务编译期生成，应用**无需也不应**自行放置 json。
 
 #### 配置文件创建步骤
 
-1. 在应用项目中创建 `app/src/main/assets` 目录（如果不存在）
-2. 创建 `reggate_config.json` 文件，按上述格式配置
-3. 在 `Application.onCreate()` 中调用 `.loadFromConfig()`
+1. 在 `$REGGATE_CONFIG_DIR` 创建 `reggate_config.json`，按上述格式配置。
+2. 编译库（或宿主 app）时 `encryptConfig` 任务自动加密生成 `reggate_config.dat`。
+3. 在 `Application.onCreate()` 中调用 `RegGateConfig.init(this).loadFromConfig().build()`，库自动读取内置 `.dat`。
 
 ### 配置联系方式
 
@@ -336,7 +336,7 @@ public void doPremiumFeature() {
 
 1. 移除 `build.gradle` 中的 `registration-lib` 依赖
 2. `Application` 类改回继承 `Application`
-3. 移除 `RegGateConfig.init()` 和 `installLifecycleGuard()` 调用
+3. 移除 `RegGateConfig.init()` 调用（守卫与按钮由 `build()` 自动安装，随依赖移除自动失效）
 4. `AndroidManifest.xml` 改回原启动 Activity
 
 ## 默认配置
@@ -349,7 +349,7 @@ public void doPremiumFeature() {
 | 试用天数 | 7 天 | 0=不提供试用 |
 | 弹框时机 | EVERY_LAUNCH | 每次启动都弹框 |
 | 间隔弹窗天数 | 7 天 | 仅 INTERVAL_DAYS 模式生效 |
-| 到期行为 | BLOCK | 到期后限制功能 |
+| 到期行为 | NAG_ONLY | 到期仅提示，不阻断（兜底默认，避免加载失败导致硬锁） |
 | 应用名称 | "本应用" | UI 展示名称 |
 | 联系电话 | `13800138000` | 注册页面显示的联系方式 |
 | 联系邮箱 | `support@example.com` | 注册页面显示的联系方式 |

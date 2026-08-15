@@ -192,3 +192,82 @@ byte[] sig = signer.sign();  // 256 字节签名结果
 | 私钥 | 注册机本地 .pem 文件 | 注册机签名生成激活码 |
 
 密钥对由 `generate_keys.sh` 使用 OpenSSL 生成 RSA-2048 密钥对。
+
+---
+
+## 密钥生成流程
+
+### 1. RSA 密钥对（注册码签名/验签）
+
+使用仓库根目录的 `generate_keys.sh` 通过 OpenSSL 生成：
+
+```bash
+# 用法: ./generate_keys.sh <密钥名> <输出目录>
+./generate_keys.sh reggate keys
+```
+
+脚本动作（见 `generate_keys.sh`）：
+
+```bash
+# 1. 生成 RSA-2048 私钥 (PKCS#8 PEM)
+openssl genrsa -out keys/reggate_priv.pem 2048
+
+# 2. 从私钥导出 X.509 公钥
+openssl rsa -in keys/reggate_priv.pem -pubout -out keys/reggate_pub.pem
+
+# 3. 生成一行 Base64 公钥（去掉 PEM 头尾与换行），用于嵌入代码
+openssl rsa -in keys/reggate_priv.pem -pubout -outform PEM \
+  | sed '/^-----BEGIN PUBLIC KEY-----$/d' \
+  | sed '/^-----END PUBLIC KEY-----$/d' \
+  | tr -d '\n' > keys/reggate_pub_base64.txt
+```
+
+产物与用途：
+
+| 文件 | 内容 | 去向 |
+|------|------|------|
+| `reggate_priv.pem` | RSA 私钥 | 注册机本地保管，**不进版本控制** |
+| `reggate_pub.pem` | RSA 公钥（PEM） | 参考用 |
+| `reggate_pub_base64.txt` | 单行 Base64 公钥 | 内容写入库资源 `registration-lib/src/main/res/raw/reggate_pub_key.txt`，编译进 AAR 供客户端验签 |
+
+### 2. 编译期配置加密密钥（对称 MASTER_KEY）
+
+配置文件（`reggate_config.json`）在编译期被加密进库，使用 **AES-256-GCM** 对称加密，**不是公钥/私钥体系**：
+
+- 密钥 `MASTER_KEY` 为硬编码常量 `RegGateLib2024KeyyNonesTopAppKey`，以 32 字节 ASCII 数组直接写在 `registration-lib/build.gradle` 的 `encryptConfig` 任务中（见下文）。
+- 派生：`key = SHA-256(MASTER_KEY)` → 32 字节 AES-256 密钥。
+- 由于是对称密钥，库运行时用**同一个 MASTER_KEY** 解密读取 `reggate_config.dat`，加解密不分离。
+
+---
+
+## 编译期配置加密流程
+
+外部配置文件 `reggate_config.json`（默认目录 `/Users/yy/pro-test/anddex-config`，可用环境变量 `REGGATE_CONFIG_DIR` 覆盖）在每次 `preBuild` 时由 Gradle 任务 `encryptConfig` 自动加密。
+
+### 生成过程（`registration-lib/build.gradle`）
+
+```
+1. 读取输入: ${REGGATE_CONFIG_DIR}/reggate_config.json
+2. 主密钥: MASTER_KEY = "RegGateLib2024KeyyNonesTopAppKey"
+           (以 32 字节 ASCII 数组硬编码在 build.gradle 的 encryptConfig 任务)
+3. 派生密钥: key = SHA-256(MASTER_KEY)   // 32 字节 → AES-256
+4. 生成随机 IV: 12 字节 (SecureRandom)
+5. 加密: AES/GCM/NoPadding, GCMParameterSpec(128, iv)
+         ciphertext = AES-GCM(plaintext)
+6. 拼接: result = IV(12) || ciphertext
+7. 输出: registration-lib/src/main/assets/reggate_config.dat
+8. 触发: preBuild.dependsOn encryptConfig  (每次编译前自动执行)
+```
+
+### 关键点
+
+| 项 | 说明 |
+|----|------|
+| 加密算法 | AES-256-GCM（带认证，防篡改） |
+| 密钥类型 | 对称密钥（MASTER_KEY 硬编码于 `build.gradle`） |
+| 随机 IV | 每次编译随机生成 12 字节，拼接在密文前 |
+| 输入源 | 外部 `reggate_config.json`，**不写死在 app** |
+| 产物 | `reggate_config.dat`，编译进 AAR 的 `assets/` |
+| 运行时 | 库用同一 MASTER_KEY 解密读取，app 无法篡改配置 |
+
+> 注意：MASTER_KEY 硬编码在 `build.gradle` 中，任何能读到该文件的人都能解密配置。此机制仅用于**防止明文配置随 AAR 泄露**，并非对抗已取得源码的攻击者的强安全边界。真正的注册安全仍依赖上节的 RSA 公钥/私钥体系。

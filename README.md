@@ -10,8 +10,8 @@ anddex/
 │   ├── src/main/java/com/reggate/lib/
 │   │   ├── CryptoUtils.java           # RSA-2048 验签
 │   │   ├── RegistrationManager.java   # 核心状态管理
-│   │   ├── RegGateConfig.java         # 配置类(默认值写死)
-│   │   ├── RegGateApplication.java    # 基类(自动守卫)
+│   │   ├── RegGateConfig.java         # 配置类(读编译期加密配置 reggate_config.dat)
+│   │   ├── RegGateApplication.java    # 基类(供宿主继承时可选使用)
 │   │   ├── RegistrationGateActivity.java  # 入口界面
 │   │   ├── TrialDialogActivity.java   # 试用弹窗
 │   │   ├── License.java               # License 数据模型
@@ -78,10 +78,12 @@ public class MyApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        // 不写死任何策略参数：全部由库编译期加密配置 reggate_config.dat 决定。
+        // 生命周期守卫与注册入口按钮在 build() 内自动安装，无需手动调用。
         RegGateConfig.init(this)
             .mainActivity(MainActivity.class)
+            .loadFromConfig()
             .build();
-        new RegistrationManager(this).installLifecycleGuard(this);
     }
 }
 ```
@@ -171,7 +173,7 @@ int licenseRemainingDays = manager.getLicenseRemainingDays();  // -1=永久
 
 1. 移除 `build.gradle` 中的 `registration-lib` 依赖
 2. Application 改回继承 `Application`
-3. 移除 `RegGateConfig.init()` 和 `installLifecycleGuard()` 调用
+3. 移除 `RegGateConfig.init()` 调用（守卫与按钮由 `build()` 自动安装，无需单独移除）
 4. `AndroidManifest.xml` 改回原启动 Activity
 
 ## 技术栈

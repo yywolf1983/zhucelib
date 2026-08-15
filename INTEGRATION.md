@@ -1,5 +1,11 @@
 # 注册库集成指南
 
+> **适用场景说明**：本文档描述的是**非标准 Gradle / 自定义 `build.sh` 宿主**（如 time2，无法正确处理 AndroidX 依赖、需手动合并 jar 与资源）的特殊集成路径，属于**备选方案**。
+>
+> 对于使用 Android Gradle 构建的常规宿主，请优先参考 **`INSTALL.md`**：通过 `implementation project(':registration-lib')` 直接引入即可，生命周期守卫与注册入口按钮在 `RegGateConfig.build()` 中自动安装，无需手动 `installLifecycleGuard`，配置由库编译期加密进 `reggate_config.dat`，app 不写死任何参数。
+>
+> 本文档仅当宿主**无法使用标准 Gradle 依赖**时才需要。
+
 ## 一、前置准备
 
 ### 1.1 环境要求
