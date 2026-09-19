@@ -87,4 +87,12 @@ android {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.9.0'
+
+    // 二维码扫描(相机界面) + 相册图片解码
+    // embedded 4.3.0 默认传递 core 3.4.x(需 API 24+), 项目 minSdk 21,
+    // 按官方方案锁定 core 3.3.0, 无需 desugaring
+    implementation('com.journeyapps:zxing-android-embedded:4.3.0') {
+        exclude group: 'com.google.zxing', module: 'core'
+    }
+    implementation 'com.google.zxing:core:3.3.0'
 }

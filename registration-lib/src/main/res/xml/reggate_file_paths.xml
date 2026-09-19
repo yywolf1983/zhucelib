@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 安装码二维码临时分享目录, 对应 getCacheDir()/qr/ -->
+    <cache-path name="reggate_qr_cache" path="qr/" />
+</paths>

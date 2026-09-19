@@ -27,11 +27,23 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.content.FileProvider;
+
+import com.google.zxing.NotFoundException;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class RegistrationActivity extends Activity {
+
+    private static final int REQ_PICK_QR_IMAGE = 0x2001;
+    private static final int REQ_PERM_SAVE_QR = 0x2002;
 
     public static final String EXTRA_APP_NAME = "extra_app_name";
     public static final String EXTRA_EXPIRED = "extra_expired";
@@ -43,11 +55,18 @@ public class RegistrationActivity extends Activity {
     private RegistrationManager manager;
 
     private boolean isAnomaly;
+    private String currentRequestCode;
     private TextView tvRequestCode;
     private TextView tvHint;
     private EditText etActivationCode;
-    private Button btnActivate;
-    private Button btnPaste;
+    private TextView btnActivate;
+    private TextView btnPaste;
+    private View btnScanQr;
+    private View btnPickQr;
+
+    /** 保存二维码的权限待处理位图(API 28 及以下)。 */
+    private Bitmap pendingSaveBitmap;
+    private String pendingSaveBaseName;
 
     private LinearLayout contactContainer;
     private TextView tvContactPhone;
@@ -89,7 +108,8 @@ public class RegistrationActivity extends Activity {
         etActivationCode = findViewById(RegGateResources.getId(this, "reggate_et_activation_code"));
         btnActivate = findViewById(RegGateResources.getId(this, "reggate_btn_activate"));
         btnPaste = findViewById(RegGateResources.getId(this, "reggate_btn_paste"));
-        Button btnCopyCode = findViewById(RegGateResources.getId(this, "reggate_btn_copy_code"));
+        View btnCopyCode = findViewById(RegGateResources.getId(this, "reggate_btn_copy_code"));
+        View btnRequestQr = findViewById(RegGateResources.getId(this, "reggate_btn_request_qr"));
 
         contactContainer = findViewById(RegGateResources.getId(this, "reggate_contact_container"));
         tvContactPhone = findViewById(RegGateResources.getId(this, "reggate_tv_contact_phone"));
@@ -137,6 +157,10 @@ public class RegistrationActivity extends Activity {
             Toast.makeText(this, RegGateResources.getString(this, "reggate_request_copied"), Toast.LENGTH_SHORT).show();
         });
 
+        if (btnRequestQr != null) {
+            btnRequestQr.setOnClickListener(v -> showRequestQrDialog());
+        }
+
         btnPaste.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (cm.hasPrimaryClip() && cm.getPrimaryClip() != null
@@ -147,6 +171,11 @@ public class RegistrationActivity extends Activity {
         });
 
         btnActivate.setOnClickListener(v -> doActivate());
+
+        btnScanQr = findViewById(RegGateResources.getId(this, "reggate_btn_scan_qr"));
+        btnPickQr = findViewById(RegGateResources.getId(this, "reggate_btn_pick_qr"));
+        btnScanQr.setOnClickListener(v -> startQrScan());
+        btnPickQr.setOnClickListener(v -> pickQrImage());
 
         etActivationCode.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
@@ -160,8 +189,16 @@ public class RegistrationActivity extends Activity {
     }
 
     private void showRequestCode() {
-        String code = manager.getCurrentRequestCode();
-        tvRequestCode.setText(Base32.group(code, 4));
+        currentRequestCode = manager.getCurrentRequestCode();
+        tvRequestCode.setText(Base32.group(currentRequestCode, 4));
+    }
+
+    private void showRequestQrDialog() {
+        if (TextUtils.isEmpty(currentRequestCode)) return;
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        QrCodeDialog.show(this, currentRequestCode,
+                Base32.group(currentRequestCode, 4),
+                "安装码二维码_" + stamp);
     }
 
     private void doActivate() {
@@ -192,6 +229,72 @@ public class RegistrationActivity extends Activity {
             setResult(RESULT_CANCELED);
             finish();
         }
+    }
+
+    // ==================== 二维码(相机扫描 / 相册识别) ====================
+
+    private void startQrScan() {
+        IntentIntegrator integrator = new IntentIntegrator(this);
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+        integrator.setPrompt(RegGateResources.getString(this, "reggate_scan_prompt"));
+        integrator.setBeepEnabled(true);
+        integrator.setCaptureActivity(PortraitCaptureActivity.class);
+        integrator.setOrientationLocked(true);
+        integrator.initiateScan();
+    }
+
+    private void pickQrImage() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(intent, REQ_PICK_QR_IMAGE);
+    }
+
+    /** 扫码/识别成功: 回填激活码(按 5 字符分组显示)并立即执行激活。 */
+    private void applyScannedCode(String raw) {
+        if (TextUtils.isEmpty(raw)) return;
+        String code = Base32.ungroup(raw);
+        if (TextUtils.isEmpty(code)) return;
+        etActivationCode.setText(Base32.group(code, 5));
+        btnActivate.setEnabled(true);
+        doActivate();
+    }
+
+    private void decodeQrImage(final Uri uri) {
+        new Thread(() -> {
+            try {
+                final String text = QrImageDecoder.decode(getApplicationContext(), uri);
+                runOnUiThread(() -> {
+                    if (!isFinishing()) applyScannedCode(text);
+                });
+            } catch (NotFoundException nf) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        RegGateResources.getString(this, "reggate_qr_not_found"),
+                        Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        RegGateResources.getString(this, "reggate_qr_load_failed"),
+                        Toast.LENGTH_SHORT).show());
+            }
+        }).start();
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (scanResult != null) {
+            // 相机扫码返回; 用户取消时 contents 为 null, 静默忽略
+            if (scanResult.getContents() != null) {
+                applyScannedCode(scanResult.getContents());
+            }
+            return;
+        }
+        if (requestCode == REQ_PICK_QR_IMAGE && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            decodeQrImage(data.getData());
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     private void setupContactInfo() {
@@ -308,23 +411,64 @@ public class RegistrationActivity extends Activity {
             Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
             return;
         }
-        Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        saveQrBitmap(((BitmapDrawable) drawable).getBitmap(), "reggate_contact_qr_" + stamp);
+    }
 
+    // ==================== 二维码保存 / 发送(安装码弹窗与联系方式二维码共用) ====================
+
+    /** 供 {@link QrCodeDialog} 调用: 保存 PNG 到相册(API 29+ 零权限)。 */
+    public void saveQrBitmap(Bitmap bitmap, String fileBaseName) {
+        if (bitmap == null) return;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            saveQrCodeViaMediaStore(bitmap);
+            saveQrViaMediaStore(bitmap, fileBaseName + ".png");
         } else {
-            if (checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE") != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"}, 100);
+            if (checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")
+                    == PackageManager.PERMISSION_GRANTED) {
+                saveQrLegacy(bitmap, fileBaseName + ".png");
             } else {
-                saveQrCodeLegacy(bitmap);
+                pendingSaveBitmap = bitmap;
+                pendingSaveBaseName = fileBaseName;
+                requestPermissions(new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"},
+                        REQ_PERM_SAVE_QR);
             }
         }
     }
 
-    private void saveQrCodeViaMediaStore(Bitmap bitmap) {
+    /** 供 {@link QrCodeDialog} 调用: 经 FileProvider 分享 PNG(微信/QQ 等)。 */
+    public void shareQrBitmap(Bitmap bitmap, String fileBaseName, String chooserTitle) {
+        if (bitmap == null) return;
+        try {
+            File dir = new File(getCacheDir(), "qr");
+            if (!dir.exists()) dir.mkdirs();
+            // 清理历史临时文件, 避免缓存堆积
+            File[] old = dir.listFiles();
+            if (old != null) {
+                for (File f : old) f.delete();
+            }
+            File file = new File(dir, fileBaseName + ".png");
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                    throw new Exception("compress failed");
+                }
+            }
+            Uri uri = FileProvider.getUriForFile(this,
+                    getPackageName() + ".reggate.fileprovider", file);
+            Intent intent = new Intent(Intent.ACTION_SEND);
+            intent.setType("image/png");
+            intent.putExtra(Intent.EXTRA_STREAM, uri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(intent, chooserTitle));
+        } catch (Exception e) {
+            Toast.makeText(this, RegGateResources.getString(this, "reggate_qr_share_failed"),
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void saveQrViaMediaStore(Bitmap bitmap, String fileName) {
         try {
             ContentValues values = new ContentValues();
-            values.put(MediaStore.Images.Media.DISPLAY_NAME, "reggate_qr_" + System.currentTimeMillis() + ".png");
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
             values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
             values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
 
@@ -346,11 +490,11 @@ public class RegistrationActivity extends Activity {
         }
     }
 
-    private void saveQrCodeLegacy(Bitmap bitmap) {
+    private void saveQrLegacy(Bitmap bitmap, String fileName) {
         try {
             File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
             if (!dir.exists()) dir.mkdirs();
-            File file = new File(dir, "reggate_qr_" + System.currentTimeMillis() + ".png");
+            File file = new File(dir, fileName);
             try (FileOutputStream fos = new FileOutputStream(file)) {
                 if (bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
                     sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));
@@ -367,14 +511,15 @@ public class RegistrationActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 100) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (currentQrCodeResId != 0 && ivQrCode.getDrawable() instanceof BitmapDrawable) {
-                    saveQrCodeLegacy(((BitmapDrawable) ivQrCode.getDrawable()).getBitmap());
-                }
+        if (requestCode == REQ_PERM_SAVE_QR) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && pendingSaveBitmap != null) {
+                saveQrLegacy(pendingSaveBitmap, pendingSaveBaseName + ".png");
             } else {
                 Toast.makeText(this, RegGateResources.getString(this, "reggate_save_qr_failed"), Toast.LENGTH_SHORT).show();
             }
+            pendingSaveBitmap = null;
+            pendingSaveBaseName = null;
         }
     }
 }

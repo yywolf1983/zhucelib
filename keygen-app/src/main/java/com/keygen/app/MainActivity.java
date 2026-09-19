@@ -3,13 +3,20 @@ package com.keygen.app;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -20,6 +27,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -27,11 +35,20 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
+
+import com.google.zxing.NotFoundException;
+import com.google.zxing.WriterException;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.security.PrivateKey;
 import java.util.ArrayList;
 import java.util.Date;
@@ -42,6 +59,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_OPEN_FILE = 0x1001;
     private static final int REQ_EXPORT_RECORDS = 0x1002;
     private static final int REQ_PICK_STORAGE_DIR = 0x1003;
+    private static final int REQ_PICK_REQUEST_QR = 0x1004;
+    private static final int REQ_PERM_SAVE_QR = 0x3001;
     private static final String PREFS_NAME = "keygen_prefs";
     private static final String PREF_LAST_KEY_URI = "last_key_uri";
 
@@ -55,6 +74,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvExpiryResult;
     private Button btnGenerate;
     private Button btnCopyActivation;
+    private ImageView ivActivationQr;
+    private TextView tvActivationQrCaption;
+    private Button btnSaveQr;
+    private Button btnShareQr;
+    private Bitmap qrBitmap;
     private Button btnViewRecords;
     private Button btnExportRecords;
     private Button btnStorageSettings;
@@ -81,8 +105,12 @@ public class MainActivity extends AppCompatActivity {
 
         Button btnSelectPriv = findViewById(R.id.btn_select_priv);
         Button btnPasteRequest = findViewById(R.id.btn_paste_request);
+        Button btnScanRequest = findViewById(R.id.btn_scan_request);
+        Button btnPickRequestQr = findViewById(R.id.btn_pick_request_qr);
 
         btnSelectPriv.setOnClickListener(v -> openPrivateKeyFile());
+        btnScanRequest.setOnClickListener(v -> startRequestQrScan());
+        btnPickRequestQr.setOnClickListener(v -> pickRequestQrImage());
 
         btnPasteRequest.setOnClickListener(v -> {
             ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -104,6 +132,13 @@ public class MainActivity extends AppCompatActivity {
             copyToClipboard("activation_code", code);
             toast("激活码已复制");
         });
+
+        ivActivationQr = findViewById(R.id.iv_activation_qr);
+        tvActivationQrCaption = findViewById(R.id.tv_activation_qr_caption);
+        btnSaveQr = findViewById(R.id.btn_save_qr);
+        btnShareQr = findViewById(R.id.btn_share_qr);
+        btnSaveQr.setOnClickListener(v -> saveQrToGallery());
+        btnShareQr.setOnClickListener(v -> shareQrImage());
 
         // 存储路径设置
         tvStoragePath = findViewById(R.id.tv_storage_path);
@@ -233,6 +268,8 @@ public class MainActivity extends AppCompatActivity {
             tvValidDaysResult.setText("购买时长: " + (validDays == 0 ? "永久" : validDays + " 天"));
             tvExpiryResult.setText("到期: " + KeygenUtils.formatExpiry(validDays));
             btnCopyActivation.setEnabled(true);
+            // 二维码放无连字符的纯码, 降低模块密度提升扫描成功率(库端 ungroup 可兼容两种)
+            showActivationQr(Base32.ungroup(code));
 
             // 提取包名
             final String pkg;
@@ -283,6 +320,21 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        // 相机扫码返回(注册机只扫安装码); 用户取消时 contents 为 null, 静默忽略
+        IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if (scanResult != null) {
+            if (scanResult.getContents() != null) {
+                applyScannedRequestCode(scanResult.getContents());
+            }
+            return;
+        }
+        if (requestCode == REQ_PICK_REQUEST_QR && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            decodeRequestQrImage(data.getData());
+            return;
+        }
+
         if (requestCode == REQ_OPEN_FILE && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri != null) {
@@ -349,6 +401,7 @@ public class MainActivity extends AppCompatActivity {
             tvValidDaysResult.setText("");
             tvExpiryResult.setText("");
             btnCopyActivation.setEnabled(false);
+            clearActivationQr();
             toast("私钥加载成功");
 
         } catch (IOException e) {
@@ -891,6 +944,192 @@ public class MainActivity extends AppCompatActivity {
                 new java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US)
                         .format(new java.util.Date()) + ".json");
         startActivityForResult(intent, REQ_EXPORT_RECORDS);
+    }
+
+    // ==================== 安装码二维码(拍照扫描 / 相册识别) ====================
+
+    private void startRequestQrScan() {
+        IntentIntegrator integrator = new IntentIntegrator(this);
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
+        integrator.setPrompt(getString(R.string.kg_scan_request_prompt));
+        integrator.setBeepEnabled(true);
+        integrator.setCaptureActivity(PortraitCaptureActivity.class);
+        integrator.setOrientationLocked(true);
+        integrator.initiateScan();
+    }
+
+    private void pickRequestQrImage() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        startActivityForResult(intent, REQ_PICK_REQUEST_QR);
+    }
+
+    /** 扫码/识别成功: 回填安装码(按 4 字符分组显示)并刷新设备总览。 */
+    private void applyScannedRequestCode(String raw) {
+        if (TextUtils.isEmpty(raw)) return;
+        String code = Base32.ungroup(raw);
+        if (TextUtils.isEmpty(code)) return;
+        etRequestCode.setText(Base32.group(code, 4));
+        etRequestCode.setSelection(etRequestCode.getText().length());
+        refreshDeviceOverview();
+        toast(getString(R.string.kg_request_qr_recognized));
+    }
+
+    private void decodeRequestQrImage(final Uri uri) {
+        new Thread(() -> {
+            try {
+                final String text = QrImageDecoder.decode(getApplicationContext(), uri);
+                runOnUiThread(() -> {
+                    if (!isFinishing()) applyScannedRequestCode(text);
+                });
+            } catch (NotFoundException nf) {
+                runOnUiThread(() -> toast(getString(R.string.kg_qr_not_found)));
+            } catch (Exception e) {
+                runOnUiThread(() -> toast(getString(R.string.kg_qr_load_failed)));
+            }
+        }).start();
+    }
+
+    // ==================== 激活码二维码 ====================
+
+    private void showActivationQr(String code) {
+        try {
+            Bitmap bmp = QrCodeUtils.encode(code, 600);
+            if (qrBitmap != null) qrBitmap.recycle();
+            qrBitmap = bmp;
+            ivActivationQr.setImageBitmap(qrBitmap);
+            ivActivationQr.setVisibility(View.VISIBLE);
+            tvActivationQrCaption.setVisibility(View.VISIBLE);
+            btnSaveQr.setEnabled(true);
+            btnShareQr.setEnabled(true);
+        } catch (WriterException e) {
+            clearActivationQr();
+            toast("二维码生成失败");
+        }
+    }
+
+    private void clearActivationQr() {
+        ivActivationQr.setImageDrawable(null);
+        ivActivationQr.setVisibility(View.GONE);
+        tvActivationQrCaption.setVisibility(View.GONE);
+        btnSaveQr.setEnabled(false);
+        btnShareQr.setEnabled(false);
+        if (qrBitmap != null) {
+            qrBitmap.recycle();
+            qrBitmap = null;
+        }
+    }
+
+    private String buildQrFileName() {
+        return "激活码二维码_" + new java.text.SimpleDateFormat(
+                "yyyyMMdd_HHmmss", java.util.Locale.US).format(new Date()) + ".png";
+    }
+
+    private void saveQrToGallery() {
+        if (qrBitmap == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            saveQrViaMediaStore();
+        } else if (checkSelfPermission("android.permission.WRITE_EXTERNAL_STORAGE")
+                == PackageManager.PERMISSION_GRANTED) {
+            saveQrLegacy();
+        } else {
+            requestPermissions(
+                    new String[]{"android.permission.WRITE_EXTERNAL_STORAGE"},
+                    REQ_PERM_SAVE_QR);
+        }
+    }
+
+    private void saveQrViaMediaStore() {
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, buildQrFileName());
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES);
+
+            ContentResolver resolver = getContentResolver();
+            Uri uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                toast(getString(R.string.kg_qr_save_failed));
+                return;
+            }
+            try (OutputStream os = resolver.openOutputStream(uri)) {
+                if (os != null && qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, os)) {
+                    toast(getString(R.string.kg_qr_saved));
+                } else {
+                    toast(getString(R.string.kg_qr_save_failed));
+                }
+            }
+        } catch (Exception e) {
+            toast(getString(R.string.kg_qr_save_failed));
+        }
+    }
+
+    private void saveQrLegacy() {
+        try {
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, buildQrFileName());
+            try (FileOutputStream fos = new FileOutputStream(file)) {
+                if (qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                    sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)));
+                    toast(getString(R.string.kg_qr_saved));
+                } else {
+                    toast(getString(R.string.kg_qr_save_failed));
+                }
+            }
+        } catch (Exception e) {
+            toast(getString(R.string.kg_qr_save_failed));
+        }
+    }
+
+    private void shareQrImage() {
+        if (qrBitmap == null) return;
+
+        File dir = new File(getCacheDir(), "qr");
+        if (!dir.exists() && !dir.mkdirs()) {
+            toast(getString(R.string.kg_qr_share_failed));
+            return;
+        }
+        // 清理历史临时文件, 目录中只保留最新一张
+        File[] oldFiles = dir.listFiles();
+        if (oldFiles != null) {
+            for (File f : oldFiles) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
+
+        File file = new File(dir, buildQrFileName());
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            if (!qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)) {
+                throw new IOException("bitmap compress failed");
+            }
+        } catch (Exception e) {
+            toast(getString(R.string.kg_qr_share_failed));
+            return;
+        }
+
+        Uri uri = FileProvider.getUriForFile(
+                this, getPackageName() + ".fileprovider", file);
+        Intent send = new Intent(Intent.ACTION_SEND);
+        send.setType("image/png");
+        send.putExtra(Intent.EXTRA_STREAM, uri);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(Intent.createChooser(send, getString(R.string.kg_qr_send_chooser)));
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @androidx.annotation.NonNull String[] permissions,
+                                           @androidx.annotation.NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_PERM_SAVE_QR) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                saveQrLegacy();
+            } else {
+                toast(getString(R.string.kg_qr_save_failed));
+            }
+        }
     }
 
     // ==================== Utils ====================

@@ -2,5 +2,18 @@
 <resources>
     <color name="reggate_primary">#1976D2</color>
     <color name="reggate_primary_dark">#1565C0</color>
+    <color name="reggate_primary_press">#0D47A1</color>
     <color name="reggate_accent">#FF6F00</color>
+
+    <!-- 二维码功能升级后的统一视觉 -->
+    <color name="reggate_card_bg">#F6F9FD</color>
+    <color name="reggate_stroke">#DEE8F2</color>
+    <color name="reggate_field_stroke">#D4DFEB</color>
+    <color name="reggate_chip_blue">#E7F1FD</color>
+    <color name="reggate_chip_blue_press">#D0E3FA</color>
+    <color name="reggate_chip_ghost_stroke">#C3D6EC</color>
+    <color name="reggate_chip_ghost_press">#E7F1FD</color>
+    <color name="reggate_text_blue">#1565C0</color>
+    <color name="reggate_text_main">#222222</color>
+    <color name="reggate_text_sub">#888888</color>
 </resources>

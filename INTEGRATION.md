@@ -406,3 +406,4 @@ RegGateConfig.init(this).mainActivity(MainActivity.class).build();
 3. **资源文件**：注册库的布局、字符串、颜色、主题资源必须复制到宿主应用
 4. **build.sh**：移除所有 AndroidX 相关依赖，避免打包冲突
 5. **主题继承**：使用 `Theme.Holo.Light.NoActionBar` 而非 MaterialComponents 主题
+6. **二维码功能**：库新增 ZXing 依赖（`com.google.zxing:core:3.3.0`，纯 Java，需手动合并 jar；`zxing-android-embedded:4.3.0` 依赖 AndroidX，本路径**不可用**）。因此非标准宿主下「扫码激活」（相机界面）无法使用，仅「相册识别」可用（只依赖 core 与 framework API）；安装码二维码可正常生成/保存，但「发送图片」依赖 `androidx.core.content.FileProvider`（AndroidX），在本路径同样**不可用**，需移除弹窗中的发送按钮或改用宿主自有分享实现；合并 jar 时需一并加入 core，`CAMERA` 权限声明可省略。若宿主完全不需要二维码，可不合并 zxing jar 并移除相关按钮

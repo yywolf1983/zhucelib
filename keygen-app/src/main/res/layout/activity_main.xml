@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -69,29 +70,92 @@
             android:textSize="13sp"
             android:textColor="#555" />
 
-        <EditText
-            android:id="@+id/et_request_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:fontFamily="monospace"
-            android:hint="@string/kg_request_code_hint"
-            android:inputType="textNoSuggestions|textVisiblePassword"
-            android:textSize="13sp" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:gravity="end"
-            android:orientation="horizontal">
+            android:layout_marginTop="6dp"
+            android:background="@drawable/kg_bg_card"
+            android:orientation="vertical"
+            android:padding="10dp">
 
-            <Button
-                android:id="@+id/btn_paste_request"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
-                android:layout_width="wrap_content"
+            <EditText
+                android:id="@+id/et_request_code"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/kg_paste_request" />
+                android:background="@drawable/kg_bg_field"
+                android:fontFamily="monospace"
+                android:hint="@string/kg_request_code_hint"
+                android:inputType="textNoSuggestions|textVisiblePassword"
+                android:padding="10dp"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_paste_request"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="38dp"
+                    android:paddingLeft="4dp"
+                    android:paddingRight="4dp"
+                    android:text="@string/kg_paste_request"
+                    android:textSize="12sp"
+                    app:icon="@drawable/kg_ic_paste"
+                    app:iconGravity="textStart"
+                    app:iconPadding="3dp"
+                    app:iconSize="16dp" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btn_scan_request"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="38dp"
+                    android:paddingLeft="4dp"
+                    android:paddingRight="4dp"
+                    android:text="@string/kg_scan_request"
+                    android:textSize="12sp"
+                    app:icon="@drawable/kg_ic_scan"
+                    app:iconGravity="textStart"
+                    app:iconPadding="3dp"
+                    app:iconSize="16dp" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <Button
+                    android:id="@+id/btn_pick_request_qr"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minHeight="38dp"
+                    android:paddingLeft="4dp"
+                    android:paddingRight="4dp"
+                    android:text="@string/kg_pick_request_qr"
+                    android:textSize="12sp"
+                    app:icon="@drawable/kg_ic_gallery"
+                    app:iconGravity="textStart"
+                    app:iconPadding="3dp"
+                    app:iconSize="16dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- 设备总览 -->
@@ -169,7 +233,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:padding="10dp"
-            android:background="#F0F4F8"
+            android:background="@drawable/kg_bg_code_box"
             android:fontFamily="monospace"
             android:textIsSelectable="true"
             android:textSize="10sp"
@@ -212,6 +276,74 @@
             android:layout_marginTop="6dp"
             android:enabled="false"
             android:text="@string/kg_copy_activation" />
+
+        <!-- 激活码二维码(生成成功后显示) -->
+        <ImageView
+            android:id="@+id/iv_activation_qr"
+            android:layout_width="220dp"
+            android:layout_height="220dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/kg_bg_qr_frame"
+            android:padding="8dp"
+            android:visibility="gone"
+            android:contentDescription="@string/kg_activation_qr" />
+
+        <TextView
+            android:id="@+id/tv_activation_qr_caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:text="@string/kg_activation_qr_caption"
+            android:textColor="#AAAAAA"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_save_qr"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="40dp"
+                android:text="@string/kg_save_qr"
+                android:textSize="12sp"
+                app:icon="@drawable/kg_ic_qr_save"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp"
+                app:iconSize="16dp" />
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="0dp" />
+
+            <Button
+                android:id="@+id/btn_share_qr"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minHeight="40dp"
+                android:text="@string/kg_share_qr"
+                android:textSize="12sp"
+                app:icon="@drawable/kg_ic_qr_share"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp"
+                app:iconSize="16dp" />
+        </LinearLayout>
 
         <!-- 注册记录区 -->
         <TextView

@@ -32,7 +32,7 @@
             android:layout_marginTop="6dp"
             android:textSize="18sp"
             android:textStyle="bold"
-            android:textColor="#222222"
+            android:textColor="@color/reggate_text_main"
             tools:ignore="HardcodedText"
             tools:text="激活 - 本应用" />
 
@@ -47,75 +47,241 @@
             tools:ignore="HardcodedText"
             tools:text="试用剩余 7 天" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="@string/reggate_request_code_label"
-            android:textSize="12sp"
-            android:textColor="#555555" />
-
-        <TextView
-            android:id="@+id/reggate_tv_request_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:padding="8dp"
-            android:background="#F0F4F8"
-            android:fontFamily="monospace"
-            android:textIsSelectable="true"
-            android:gravity="center"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#1565C0"
-            tools:ignore="HardcodedText"
-            tools:text="ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ01-2345" />
-
-        <Button
-            android:id="@+id/reggate_btn_copy_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/reggate_copy_request" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/reggate_activation_code_label"
-            android:textSize="12sp"
-            android:textColor="#555555" />
-
-        <EditText
-            android:id="@+id/reggate_et_activation_code"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:minLines="3"
-            android:gravity="top|start"
-            android:fontFamily="monospace"
-            android:hint="@string/reggate_activation_code_hint"
-            android:inputType="textMultiLine|textNoSuggestions|textVisiblePassword"
-            android:textSize="12sp" />
-
+        <!-- ============ 卡片 1: 本机安装码 ============ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="4dp">
+            android:orientation="vertical"
+            android:layout_marginTop="14dp"
+            android:padding="12dp"
+            android:background="@drawable/reggate_bg_card">
 
-            <Button
-                android:id="@+id/reggate_btn_paste"
-                android:layout_width="0dp"
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/reggate_paste" />
+                android:text="@string/reggate_request_code_label"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#555555" />
 
-            <Button
+            <TextView
+                android:id="@+id/reggate_tv_request_code"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:padding="10dp"
+                android:background="@drawable/reggate_bg_field"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true"
+                android:gravity="center"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/reggate_text_blue"
+                tools:ignore="HardcodedText"
+                tools:text="ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ01-2345" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout
+                    android:id="@+id/reggate_btn_copy_code"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/reggate_bg_chip_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/reggate_ic_copy"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:textColor="@color/reggate_text_blue"
+                        android:textSize="12sp"
+                        android:text="@string/reggate_copy_request" />
+                </LinearLayout>
+
+                    <View
+                        android:layout_width="8dp"
+                        android:layout_height="0dp" />
+
+                    <LinearLayout
+                        android:id="@+id/reggate_btn_request_qr"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:background="@drawable/reggate_bg_chip_blue"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="9dp"
+                        android:paddingBottom="9dp">
+
+                        <ImageView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:src="@drawable/reggate_ic_qr"
+                            android:contentDescription="@null" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:textColor="@color/reggate_text_blue"
+                            android:textStyle="bold"
+                            android:textSize="12sp"
+                            android:text="@string/reggate_show_request_qr" />
+                    </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- ============ 卡片 2: 激活码 ============ -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="10dp"
+            android:padding="12dp"
+            android:background="@drawable/reggate_bg_card">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/reggate_activation_code_label"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="#555555" />
+
+            <EditText
+                android:id="@+id/reggate_et_activation_code"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:minLines="3"
+                android:gravity="top|start"
+                android:fontFamily="monospace"
+                android:background="@drawable/reggate_bg_field"
+                android:padding="10dp"
+                android:hint="@string/reggate_activation_code_hint"
+                android:textColorHint="#B0BEC5"
+                android:inputType="textMultiLine|textNoSuggestions|textVisiblePassword"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:id="@+id/reggate_btn_paste"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/reggate_bg_chip_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp"
+                    android:textColor="@color/reggate_text_blue"
+                    android:textSize="12sp"
+                    android:text="@string/reggate_paste" />
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <LinearLayout
+                    android:id="@+id/reggate_btn_scan_qr"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/reggate_bg_chip_blue"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/reggate_ic_scan_qr"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:textColor="@color/reggate_text_blue"
+                        android:textStyle="bold"
+                        android:textSize="12sp"
+                        android:text="@string/reggate_scan_qr" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="8dp"
+                    android:layout_height="0dp" />
+
+                <LinearLayout
+                    android:id="@+id/reggate_btn_pick_qr"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="@drawable/reggate_bg_chip_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingTop="9dp"
+                    android:paddingBottom="9dp">
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/reggate_ic_gallery"
+                        android:contentDescription="@null" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:textColor="@color/reggate_text_blue"
+                        android:textSize="12sp"
+                        android:text="@string/reggate_pick_qr" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
                 android:id="@+id/reggate_btn_activate"
-                android:layout_width="0dp"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/reggate_bg_button_primary"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
                 android:enabled="false"
                 android:text="@string/reggate_activate" />
         </LinearLayout>
@@ -124,6 +290,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:gravity="center"
             android:textSize="11sp"
             android:textColor="#AAAAAA"
             android:text="@string/reggate_how_to" />
@@ -134,7 +301,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:orientation="vertical"
-            android:background="#F8F9FA"
+            android:background="@drawable/reggate_bg_card"
             android:padding="12dp"
             android:visibility="gone">
 
@@ -166,7 +333,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="#1565C0"
+                    android:textColor="@color/reggate_text_blue"
                     android:text="@string/reggate_copy"
                     android:paddingLeft="8dp" />
             </LinearLayout>
@@ -190,7 +357,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="#1565C0"
+                    android:textColor="@color/reggate_text_blue"
                     android:text="@string/reggate_copy"
                     android:paddingLeft="8dp" />
             </LinearLayout>
@@ -214,7 +381,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="#1565C0"
+                    android:textColor="@color/reggate_text_blue"
                     android:text="@string/reggate_copy"
                     android:paddingLeft="8dp" />
             </LinearLayout>
@@ -238,7 +405,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textSize="12sp"
-                    android:textColor="#1565C0"
+                    android:textColor="@color/reggate_text_blue"
                     android:text="@string/reggate_copy"
                     android:paddingLeft="8dp" />
             </LinearLayout>

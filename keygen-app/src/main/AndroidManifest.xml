@@ -1,11 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 保存二维码到相册: Android 9 及以下需要, Q+ 走 MediaStore 无需此权限 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- 扫描客户机安装码二维码(相册识别不需要权限, 仅相机扫码需要) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:allowBackup="false"
         android:icon="@android:drawable/ic_lock_lock"
         android:label="@string/keygen_app_name"
         android:theme="@style/Theme.Keygen">
+
+        <!-- 二维码图片分享(微信/QQ 等): 授时读取 cache 中的 PNG -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/kg_file_paths" />
+        </provider>
 
         <activity
             android:name=".MainActivity"
@@ -21,6 +41,12 @@
             android:exported="false"
             android:label="注册记录"
             android:parentActivityName=".MainActivity" />
+
+        <!-- 强制竖屏的二维码扫码界面 -->
+        <activity
+            android:name=".PortraitCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
     </application>
 

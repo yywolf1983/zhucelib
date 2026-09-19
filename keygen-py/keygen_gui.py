@@ -2,46 +2,316 @@
 
 与 Android 端 keygen-app 功能对齐:
   - 从本地文件加载 RSA 私钥 (PKCS#8 / PKCS#1, PEM 或 DER)
-  - 粘贴安装码, 解析出设备ID 与 包名
+  - 粘贴安装码, 或从二维码图片识别安装码, 解析出设备ID 与 包名
   - 指定有效天数 (0 = 永久)
-  - 生成带包绑定的激活码并支持复制
+  - 生成带包绑定的激活码, 支持复制与二维码展示/保存
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+# 二维码为新增依赖: 未执行 `uv sync` 时仅二维码功能不可用, 不影响其他功能启动
+try:
+    import qrcode
+    from qrcode.constants import ERROR_CORRECT_M
+    from PIL import Image, ImageOps, ImageTk
+except ImportError:  # pragma: no cover - 取决于运行环境
+    qrcode = None
+    ERROR_CORRECT_M = None
+    Image = None
+    ImageOps = None
+    ImageTk = None
+
+# 安装码图片识别/摄像头扫码依赖(headless: VideoCapture 仍可用, 预览在 Tk 内渲染)
+try:
+    import cv2
+    import numpy as np
+except ImportError:  # pragma: no cover - 取决于运行环境
+    cv2 = None
+    np = None
+
 import reggate
 import records
 
-# ===== 配色 (现代、统一) =====
-PRIMARY       = "#2563EB"   # 主蓝
-PRIMARY_DARK  = "#1D4ED8"   # 主蓝(按下)
-PRIMARY_LIGHT = "#DBEAFE"   # 主蓝(浅底)
-BG            = "#F1F5F9"   # 主背景 (slate-100)
+# ===== 配色(与 Android 端 reggate/kg 色板完全一致) =====
+PRIMARY       = "#1976D2"   # 品牌主蓝
+PRIMARY_DARK  = "#1565C0"   # 主蓝(悬停)
+PRIMARY_PRESS = "#0D47A1"   # 主蓝(按下)
+PRIMARY_LIGHT = "#E7F1FD"   # 浅蓝底(chip)
+CHIP_PRESS    = "#D0E3FA"   # 浅蓝底(按下)
+BG            = "#EDF2F7"   # 窗口底色(衬托白卡)
 CARD          = "#FFFFFF"   # 卡片/表面
-TEXT          = "#0F172A"   # 主文字 (slate-900)
+CARD_TINT     = "#F6F9FD"   # 次级卡片/字段底
+STROKE        = "#DEE8F2"   # 卡片描边
+FIELD_STROKE  = "#D4DFEB"   # 输入框描边
+TEXT          = "#222222"   # 主文字
 DARK          = TEXT
-MUTED         = "#64748B"   # 次要文字 (slate-500)
-BORDER        = "#E2E8F0"   # 边框 (slate-200)
-SUCCESS       = "#059669"   # 绿 (emerald)
+MUTED         = "#7A8699"   # 次要文字
+BORDER        = STROKE
+SUCCESS       = "#1E8E5A"   # 成功绿
 DANGER        = "#DC2626"   # 红
 FIELD_BG      = "#FFFFFF"
-CODE_BG       = "#F8FAFC"
+CODE_BG       = "#FFFFFF"
 
 # 辅助色
-PANEL       = "#0F172A"   # 深色面板/页脚
-PANEL_FG    = "#E2E8F0"
-HEADER_FG   = "#BFDBFE"   # 标题栏副标题
-CODE_FG     = "#1D4ED8"   # 激活码文字
-CODE_BOX    = "#EFF6FF"   # 激活码背景 (blue-50)
-PKG_FG      = "#7E22CE"   # 包名 (紫)
-DURATION_FG = "#EA580C"   # 购买时长 (橙)
-CARD_HDR    = "#EEF2FF"   # 设备卡头部 (indigo-50)
-BULLET      = "#CBD5E1"   # 圆点
+PANEL       = CARD_TINT    # 底部状态栏(浅)
+PANEL_FG    = MUTED
+HEADER_FG   = "#CDE2FA"   # 蓝色标题栏上的副标题
+CODE_FG     = "#1565C0"   # 激活码/设备码文字
+CODE_BOX    = PRIMARY_LIGHT
+PKG_FG      = "#7B1FA2"   # 包名 (紫)
+DURATION_FG = "#E65100"   # 购买时长 (橙)
+CARD_HDR    = CARD_TINT
+BULLET      = "#C3D6EC"   # 圆点/占位描边
+
+
+def _round_rect_points(x1, y1, x2, y2, r=10, steps=6):
+    """生成平滑圆角矩形多边形点列(用于 Canvas.create_polygon)。"""
+    pts = []
+    # 上右 -> 下右 -> 下左 -> 上左
+    arcs = [
+        (x2 - r, y1 + r, -90, 0),
+        (x2 - r, y2 - r, 0, 90),
+        (x1 + r, y2 - r, 90, 180),
+        (x1 + r, y1 + r, 180, 270),
+    ]
+    import math
+    for cx, cy, a1, a2 in arcs:
+        for i in range(steps + 1):
+            a = math.radians(a1 + (a2 - a1) * i / steps)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+
+class RoundedCard(tk.Canvas):
+    """圆角白卡(Canvas 自绘, ttk 不支持圆角)。
+
+    内容请 pack/grid 到 :attr:`inner`; 高度随内容自适应。
+    """
+
+    def __init__(self, parent, title: str = "", radius: int = 12,
+                 padx: int = 16, title_gap: int = 6, **kw):
+        super().__init__(parent, highlightthickness=0, bd=0, bg=kw.pop("bg", BG),
+                         **kw)
+        self.radius = radius
+        self._padx = padx
+        self._title_h = 34 if title else 12
+        self._title_gap = title_gap if title else 0
+
+        self.inner = tk.Frame(self, bg=CARD)
+        self._win = self.create_window(padx, self._title_h, window=self.inner,
+                                       anchor="nw")
+        if title:
+            self._title_id = self.create_text(
+                padx + 2, 17, anchor="w", text=title,
+                font=("TkDefaultFont", 12, "bold"), fill="#33414E")
+        else:
+            self._title_id = None
+
+        self.inner.bind("<Configure>", self._on_inner)
+        self.bind("<Configure>", self._on_canvas)
+        self._cw = 1
+        self._ch = 1
+
+    def _on_inner(self, _e):
+        h = self._title_h + self._title_gap + self.inner.winfo_reqheight() + 12
+        self._ch = h
+        self.configure(height=h)
+        self.itemconfigure(self._win, width=self._cw - self._padx * 2)
+        self._redraw()
+
+    def _on_canvas(self, e):
+        if e.width != self._cw:
+            self._cw = e.width
+            self.itemconfigure(self._win, width=self._cw - self._padx * 2)
+            self._redraw()
+
+    def _redraw(self):
+        self.delete("bg")
+        w = self._cw
+        h = self._ch
+        self.create_polygon(_round_rect_points(0.75, 0.75, w - 0.75, h - 0.75,
+                                               self.radius),
+                            fill=CARD, outline=STROKE, width=1, tags="bg")
+        self.tag_lower("bg")
+        if self._title_id is not None:
+            self.tag_raise(self._title_id)
+
+
+class RoundedButton(tk.Canvas):
+    """圆角按钮: primary(实心蓝) / outline(白底蓝边) / tinted(浅蓝底)。"""
+
+    def __init__(self, parent, text: str, command=None, variant: str = "primary",
+                 height: int = 36, parent_bg: str = CARD, font_size: int = 10,
+                 bold: bool = False):
+        super().__init__(parent, height=height, highlightthickness=0, bd=0,
+                         bg=parent_bg, cursor="hand2")
+        self.command = command
+        self.variant = variant
+        self.height = height
+        self.enabled = True
+        self._hover = False
+        self._pressed = False
+        self._text = text
+        self._font = ("TkDefaultFont", font_size, "bold" if bold else "normal")
+        self._cw = 0
+
+        import tkinter.font as tkfont
+        f = tkfont.Font(family="TkDefaultFont", size=font_size,
+                        weight="bold" if bold else "normal")
+        self._cw = f.measure(text) + 36
+        self.configure(width=self._cw)
+
+        self.bind("<Configure>", self._on_configure)
+        self.bind("<Enter>", self._enter)
+        self.bind("<Leave>", self._leave)
+        self.bind("<ButtonPress-1>", self._press)
+        self.bind("<ButtonRelease-1>", self._release)
+
+    def _on_configure(self, e):
+        # fill=X 拉伸时实际宽度由布局决定
+        if e.width > 1:
+            self._cw = e.width
+        self._redraw()
+
+    def set_enabled(self, enabled: bool):
+        if self.enabled != enabled:
+            self.enabled = enabled
+            self.configure(cursor="hand2" if enabled else "arrow")
+            self._redraw()
+
+    def _colors(self):
+        if not self.enabled:
+            if self.variant == "primary":
+                return "#B8C7D9", "", "#FFFFFF"
+            return CARD, "#DDE5EE", "#9AA8B6"
+        if self.variant == "primary":
+            fill = PRIMARY_PRESS if self._pressed else \
+                PRIMARY_DARK if self._hover else PRIMARY
+            return fill, "", "#FFFFFF"
+        if self.variant == "tinted":
+            fill = CHIP_PRESS if (self._hover or self._pressed) else PRIMARY_LIGHT
+            return fill, "", CODE_FG
+        # outline
+        fill = PRIMARY_LIGHT if (self._hover or self._pressed) else CARD
+        return fill, "#B8CCE2", CODE_FG
+
+    def _redraw(self):
+        self.delete("all")
+        fill, outline, fg = self._colors()
+        w = self._cw or int(self.cget("width"))
+        h = self.height
+        self.create_polygon(_round_rect_points(1, 1, w - 1, h - 1, 8),
+                            fill=fill, outline=outline or fill, width=1)
+        self.create_text(w / 2, h / 2, text=self._text, fill=fg,
+                         font=self._font)
+
+    def _enter(self, _e):
+        self._hover = True
+        self._redraw()
+
+    def _leave(self, _e):
+        self._hover = False
+        self._pressed = False
+        self._redraw()
+
+    def _press(self, _e):
+        if not self.enabled:
+            return
+        self._pressed = True
+        self._redraw()
+
+    def _release(self, _e):
+        if not self.enabled:
+            return
+        was = self._pressed
+        self._pressed = False
+        self._redraw()
+        if was and self._hover and self.command:
+            self.command()
+
+
+class _StatusPill(tk.Canvas):
+    """标题栏右侧的私钥状态胶囊(蓝底深胶囊 + 状态点)。"""
+
+    HEIGHT = 28
+    DOT_EMPTY = "#9FB8D4"
+    DOT_LOADED = "#7BE0B0"
+
+    def __init__(self, parent):
+        super().__init__(parent, height=self.HEIGHT, highlightthickness=0, bd=0,
+                         bg=PRIMARY)
+        import tkinter.font as tkfont
+        self._font = tkfont.Font(family="TkDefaultFont", size=9)
+        self.set_empty()
+
+    def _render(self, text: str, dot: str):
+        text_w = self._font.measure(text)
+        w = text_w + 40
+        self.configure(width=w)
+        self.delete("all")
+        self.create_polygon(
+            _round_rect_points(0.5, 0.5, w - 0.5, self.HEIGHT - 0.5, 9),
+            fill=PRIMARY_DARK, outline=PRIMARY_DARK)
+        self.create_text(20, self.HEIGHT / 2 + 0.5, text="●", fill=dot,
+                         font=("TkDefaultFont", 9))
+        self.create_text(32, self.HEIGHT / 2, anchor="w", text=text,
+                         fill="#FFFFFF", font=("TkDefaultFont", 9))
+
+    def set_empty(self):
+        self._render("未加载私钥", self.DOT_EMPTY)
+
+    def set_loaded(self, file_name: str):
+        if len(file_name) > 22:
+            file_name = file_name[:10] + "…" + file_name[-10:]
+        self._render("已加载 · " + file_name, self.DOT_LOADED)
+
+
+class _InfoTile(tk.Canvas):
+    """圆角浅色字段块: 小标题 + 值(值控件由外部放进 inner)。整块可点击复制。"""
+
+    def __init__(self, parent, title: str):
+        super().__init__(parent, height=64, highlightthickness=0, bd=0, bg=CARD,
+                         cursor="hand2")
+        self.inner = tk.Frame(self, bg=CARD_TINT)
+        self._win = self.create_window(10, 9, window=self.inner, anchor="nw")
+        tk.Label(self.inner, text=title, bg=CARD_TINT, fg=MUTED,
+                 font=("TkDefaultFont", 8, "bold")).pack(anchor=tk.W)
+        self._cw = 1
+        self._ch = 56
+        self.inner.bind("<Configure>", self._on_inner)
+        self.bind("<Configure>", self._on_canvas)
+
+    def _on_inner(self, _e):
+        h = max(self.inner.winfo_reqheight() + 18, 56)
+        self._ch = h
+        self.configure(height=h)
+        self.itemconfigure(self._win, width=self._cw - 20)
+        self._redraw()
+
+    def _on_canvas(self, e):
+        if e.width != self._cw:
+            self._cw = e.width
+            self.itemconfigure(self._win, width=self._cw - 20)
+            self._redraw()
+
+    def _redraw(self):
+        self.delete("bg")
+        self.create_polygon(
+            _round_rect_points(0.5, 0.5, self._cw - 0.5, self._ch - 0.5, 8),
+            fill=CARD_TINT, outline=CARD_TINT, tags="bg")
+        self.tag_lower("bg")
+
+    def bind_click(self, callback):
+        self.bind("<Button-1>", lambda _e: callback())
+        for child in (self.inner, *self.inner.winfo_children()):
+            child.bind("<Button-1>", lambda _e: callback())
 
 
 class KeygenApp:
@@ -49,7 +319,8 @@ class KeygenApp:
         self.root = root
         self.root.title("RegGate 注册机")
         self.root.configure(bg=BG)
-        self.root.geometry("620x760")
+        self.root.geometry("640x820")
+        self.root.minsize(580, 680)
         self.root.resizable(True, True)
 
         self.private_key = None
@@ -76,147 +347,268 @@ class KeygenApp:
             pass
         style.configure("TFrame", background=BG)
         style.configure("TLabel", background=BG, foreground=TEXT)
+        # 记录窗口仍在使用 LabelFrame 卡片
         style.configure("Card.TLabelframe", background=CARD, borderwidth=1,
-                        relief="solid", bordercolor=BORDER)
+                        relief="solid", bordercolor=STROKE)
         style.configure("Card.TLabelframe.Label", background=BG, foreground=PRIMARY,
                         font=("TkDefaultFont", 11, "bold"))
         style.configure("TButton", padding=(10, 6), font=("TkDefaultFont", 10),
                         background=CARD, foreground=TEXT, borderwidth=1, relief="solid")
-        style.map("TButton", background=[("active", "#E2E8F0"), ("disabled", "#E2E8F0")],
-                  foreground=[("disabled", "#94A3B8")])
+        style.map("TButton", background=[("active", CARD_TINT), ("disabled", CARD_TINT)],
+                  foreground=[("disabled", "#9AA8B6")])
+        # 蓝色标题栏上的按钮(记录窗口)
+        style.configure("Header.TButton", background=PRIMARY_DARK, foreground="white",
+                        borderwidth=0, padding=(12, 5),
+                        font=("TkDefaultFont", 10))
+        style.map("Header.TButton",
+                  background=[("active", PRIMARY_PRESS), ("disabled", PRIMARY_DARK)])
         style.configure("Accent.TButton", background=PRIMARY, foreground="white",
                         borderwidth=0, padding=(14, 9), font=("TkDefaultFont", 11, "bold"))
-        style.map("Accent.TButton", background=[("active", PRIMARY_DARK), ("disabled", "#93C5FD")],
-                  foreground=[("disabled", PRIMARY_LIGHT)])
-        style.configure("Ghost.TButton", background=CARD, foreground=PRIMARY,
+        style.map("Accent.TButton",
+                  background=[("active", PRIMARY_DARK), ("disabled", "#B8C7D9")],
+                  foreground=[("disabled", "#FFFFFF")])
+        style.configure("Ghost.TButton", background=CARD, foreground=CODE_FG,
                         borderwidth=1, relief="solid", padding=(10, 6),
-                        font=("TkDefaultFont", 10))
+                        font=("TkDefaultFont", 10), bordercolor="#B8CCE2")
         style.map("Ghost.TButton", background=[("active", PRIMARY_LIGHT)])
         style.configure("Danger.TButton", background=DANGER, foreground="white",
                         borderwidth=0, padding=(10, 6), font=("TkDefaultFont", 10, "bold"))
         style.map("Danger.TButton", background=[("active", "#B91C1C"), ("disabled", "#FCA5A5")],
                   foreground=[("disabled", "#FEE2E2")])
-        style.configure("TEntry", padding=7, fieldbackground=FIELD_BG, foreground=TEXT,
-                        borderwidth=1, relief="solid")
-        style.configure("TSpinbox", padding=6, fieldbackground=FIELD_BG, foreground=TEXT,
-                         borderwidth=1, relief="solid")
+        style.configure("TEntry", padding=8, fieldbackground=FIELD_BG, foreground=TEXT,
+                        borderwidth=1, relief="solid", bordercolor=FIELD_STROKE,
+                        lightcolor=FIELD_STROKE, darkcolor=FIELD_STROKE,
+                        insertcolor=TEXT)
+        style.map("TEntry",
+                  bordercolor=[("focus", PRIMARY)],
+                  lightcolor=[("focus", PRIMARY)],
+                  darkcolor=[("focus", PRIMARY)])
+        style.configure("TSpinbox", padding=7, fieldbackground=FIELD_BG, foreground=TEXT,
+                        borderwidth=1, relief="solid", bordercolor=FIELD_STROKE,
+                        lightcolor=FIELD_STROKE, darkcolor=FIELD_STROKE,
+                        arrowsize=14)
+        style.map("TSpinbox",
+                  bordercolor=[("focus", PRIMARY)],
+                  lightcolor=[("focus", PRIMARY)],
+                  darkcolor=[("focus", PRIMARY)])
         style.configure("Link.TLabel", foreground=PRIMARY, background=BG,
                         font=("TkDefaultFont", 9))
 
-    # ---------------- UI ----------------
-    def _section(self, parent: ttk.Frame, title: str) -> ttk.Frame:
-        lf = ttk.LabelFrame(parent, text=title, style="Card.TLabelframe", padding=(14, 10))
-        lf.pack(fill=tk.X, pady=(0, 10))
-        return lf
-
-    def _divider(self, parent: ttk.Frame) -> None:
-        sep = ttk.Separator(parent, orient="horizontal")
-        sep.pack(fill=tk.X, pady=8)
+    # ---------------- UI 小工具 ----------------
+    @staticmethod
+    def _divider(parent) -> None:
+        sep = tk.Frame(parent, bg=STROKE, height=1)
+        sep.pack(fill=tk.X, pady=10)
 
     def _build_ui(self) -> None:
-        # 顶部标题栏
-        header = tk.Frame(self.root, bg=PRIMARY, height=66)
+        # ============ 顶部品牌栏 ============
+        header = tk.Frame(self.root, bg=PRIMARY, height=60)
         header.pack(fill=tk.X)
-        tk.Label(header, text="RegGate 注册机", bg=PRIMARY, fg="white",
-                 font=("TkDefaultFont", 18, "bold")).pack(side=tk.LEFT, padx=22, pady=12)
-        tk.Label(header, text="激活码生成工具", bg=PRIMARY, fg=HEADER_FG,
-                 font=("TkDefaultFont", 10)).pack(side=tk.LEFT, padx=4, pady=16)
+        header.pack_propagate(False)
+        title_box = tk.Frame(header, bg=PRIMARY)
+        title_box.pack(side=tk.LEFT, padx=20)
+        tk.Label(title_box, text="RegGate 注册机", bg=PRIMARY, fg="white",
+                 font=("TkDefaultFont", 17, "bold")).pack(anchor=tk.W, pady=(9, 0))
+        tk.Label(title_box, text="激活码生成工具", bg=PRIMARY, fg=HEADER_FG,
+                 font=("TkDefaultFont", 9)).pack(anchor=tk.W, pady=(0, 8))
 
-        # 主体（窗口可缩放, 内容随窗口填充）
-        body = ttk.Frame(self.root, style="TFrame")
-        body.pack(fill=tk.BOTH, expand=True)
-        inner = ttk.Frame(body, style="TFrame", padding=(20, 14))
-        inner.pack(fill=tk.BOTH, expand=True)
+        # 私钥状态胶囊(始终可见)
+        self.key_status = _StatusPill(header)
+        self.key_status.pack(side=tk.RIGHT, padx=18)
 
-        # —— 密钥与存储 ——
-        sec = self._section(inner, "密钥与存储")
-        key_row = ttk.Frame(sec, style="TFrame")
-        key_row.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(key_row, text="选择私钥…", command=self._select_private_key,
-                   style="Ghost.TButton").pack(side=tk.LEFT)
-        self.key_status = ttk.Label(key_row, text="未加载私钥", foreground=MUTED)
-        self.key_status.pack(side=tk.LEFT, padx=12)
+        # ============ 底部状态栏(先占位) ============
+        self.status_var = tk.StringVar(value="就绪")
+        footer = tk.Frame(self.root, bg=PANEL, height=28)
+        footer.pack(side=tk.BOTTOM, fill=tk.X)
+        footer.pack_propagate(False)
+        tk.Frame(footer, bg=STROKE, height=1).pack(fill=tk.X, side=tk.TOP)
+        tk.Label(footer, textvariable=self.status_var, bg=PANEL, fg=PANEL_FG,
+                 font=("TkDefaultFont", 9), anchor=tk.W, padx=16).pack(fill=tk.BOTH,
+                                                                        expand=True)
+
+        # ============ 主体(可滚动) ============
+        container = tk.Frame(self.root, bg=BG)
+        container.pack(fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(container, bg=BG, highlightthickness=0, bd=0)
+        vsb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        inner = tk.Frame(canvas, bg=BG)
+        self.scroll_inner = inner
+        canvas_window = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>",
+                   lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>",
+                    lambda e: canvas.itemconfigure(canvas_window, width=e.width))
+
+        def _on_wheel(e):
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda _e: canvas.bind_all("<MouseWheel>", _on_wheel))
+        canvas.bind("<Leave>", lambda _e: canvas.unbind_all("<MouseWheel>"))
+
+        # —— 卡片 1: 密钥与存储 ——
+        card = RoundedCard(inner, "密钥与存储")
+        card.pack(fill=tk.X, padx=18, pady=(14, 5))
+        sec = card.inner
+        row = tk.Frame(sec, bg=CARD)
+        row.pack(fill=tk.X)
+        RoundedButton(row, "选择私钥…", self._select_private_key,
+                      variant="outline", height=34).pack(side=tk.LEFT)
 
         self._divider(sec)
-        save_row = ttk.Frame(sec, style="TFrame")
-        save_row.pack(fill=tk.X)
-        ttk.Button(save_row, text="选择目录…", command=self._choose_save_location,
-                   style="Ghost.TButton").pack(side=tk.LEFT)
-        ttk.Button(save_row, text="查看记录",
-                   command=lambda: self._view_records(
-                       pkg_highlight=self.current_pkg or None,
-                       device_highlight=self.current_dev or None),
-                   style="Ghost.TButton").pack(side=tk.LEFT, padx=8)
+        row = tk.Frame(sec, bg=CARD)
+        row.pack(fill=tk.X)
+        RoundedButton(row, "选择目录…", self._choose_save_location,
+                      variant="outline", height=34).pack(side=tk.LEFT)
+        RoundedButton(row, "查看记录",
+                      lambda: self._view_records(
+                          pkg_highlight=self.current_pkg or None,
+                          device_highlight=self.current_dev or None),
+                      variant="outline", height=34).pack(side=tk.LEFT, padx=(10, 0))
+        self.save_label = tk.Label(sec, text="-", fg=MUTED, bg=CARD, anchor=tk.W,
+                                   justify=tk.LEFT, wraplength=520,
+                                   font=("TkDefaultFont", 9))
+        self.save_label.pack(fill=tk.X, pady=(10, 0))
 
-        self.save_label = ttk.Label(sec, text="-", foreground=MUTED,
-                                    font=("TkDefaultFont", 9), wraplength=520)
-        self.save_label.pack(anchor=tk.W, pady=(8, 0))
-
-        # —— 安装码 ——
-        sec = self._section(inner, "安装码请求")
-        req_row = ttk.Frame(sec, style="TFrame")
-        req_row.pack(fill=tk.X)
-        ttk.Button(req_row, text="粘贴", command=self._paste_request,
-                   style="Ghost.TButton").pack(side=tk.LEFT)
+        # —— 卡片 2: 客户机安装码 ——
+        card = RoundedCard(inner, "客户机安装码")
+        card.pack(fill=tk.X, padx=18, pady=5)
+        sec = card.inner
         self.request_var = tk.StringVar()
-        self.request_entry = ttk.Entry(req_row, textvariable=self.request_var,
+        self.request_entry = ttk.Entry(sec, textvariable=self.request_var,
                                        font=("Courier", 11))
-        self.request_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(10, 0))
+        self.request_entry.pack(fill=tk.X)
         self.request_entry.bind("<KeyRelease>", lambda _e: self._on_request_changed())
 
+        row = tk.Frame(sec, bg=CARD)
+        row.pack(fill=tk.X, pady=(10, 0))
+        RoundedButton(row, "粘贴", self._paste_request,
+                      variant="outline", height=34).pack(side=tk.LEFT)
+        RoundedButton(row, "图片识别…", self._pick_request_image,
+                      variant="tinted", height=34).pack(side=tk.LEFT, padx=(10, 0))
+
         self._divider(sec)
-        info_row = ttk.Frame(sec, style="TFrame")
+        # 设备信息: 两个字段块(强制等宽)
+        info_row = tk.Frame(sec, bg=CARD)
         info_row.pack(fill=tk.X)
-        ttk.Label(info_row, text="设备 ID", foreground=MUTED).grid(row=0, column=0, sticky=tk.W, padx=(0, 12))
-        self.device_id_label = ttk.Label(info_row, text="-", font=("Courier", 10),
-                                          foreground=PRIMARY, cursor="hand2")
-        self.device_id_label.grid(row=0, column=1, sticky=tk.W)
+        info_row.grid_columnconfigure(0, weight=1, uniform="infotile")
+        info_row.grid_columnconfigure(1, weight=1, uniform="infotile")
+        dev_tile = self._info_tile(info_row, "设备 ID（点击复制）")
+        dev_tile.grid(row=0, column=0, sticky=tk.EW, padx=(0, 5))
+        pkg_tile = self._info_tile(info_row, "包名（点击复制）")
+        pkg_tile.grid(row=0, column=1, sticky=tk.EW, padx=(5, 0))
+
+        self.device_id_label = tk.Label(dev_tile.inner, text="-", bg=CARD_TINT,
+                                        fg=CODE_FG, font=("Courier", 9, "bold"),
+                                        cursor="hand2", justify=tk.LEFT, anchor=tk.W,
+                                        wraplength=150)
+        self.device_id_label.pack(fill=tk.X)
         self.device_id_label.bind("<Button-1>", lambda _e: self._copy_device_id())
-        ttk.Label(info_row, text="包名", foreground=MUTED).grid(row=1, column=0, sticky=tk.W, padx=(0, 12), pady=(6, 0))
-        self.pkg_label = ttk.Label(info_row, text="-", foreground=PKG_FG,
-                                   font=("TkDefaultFont", 10, "bold"), cursor="hand2")
-        self.pkg_label.grid(row=1, column=1, sticky=tk.W, pady=(6, 0))
+        dev_tile.bind_click(self._copy_device_id)
+        self.pkg_label = tk.Label(pkg_tile.inner, text="-", bg=CARD_TINT,
+                                  fg=PKG_FG, font=("TkDefaultFont", 10, "bold"),
+                                  cursor="hand2", justify=tk.LEFT, anchor=tk.W,
+                                  wraplength=150)
+        self.pkg_label.pack(fill=tk.X)
         self.pkg_label.bind("<Button-1>", lambda _e: self._copy_pkg())
+        pkg_tile.bind_click(self._copy_pkg)
+        # 字段块随窗口缩放时动态调整换行宽度
+        for _t, _lbl in ((dev_tile, self.device_id_label),
+                         (pkg_tile, self.pkg_label)):
+            _t.bind("<Configure>",
+                    lambda e, lbl=_lbl: lbl.configure(
+                        wraplength=max(80, e.width - 26)))
 
-        self.device_hint = ttk.Label(sec, text="", foreground=MUTED,
-                                      font=("TkDefaultFont", 9), cursor="")
-        self.device_hint.pack(anchor=tk.W, pady=(8, 0))
+        self.device_hint = tk.Label(sec, text="", fg=MUTED, bg=CARD, anchor=tk.W,
+                                    justify=tk.LEFT, font=("TkDefaultFont", 9))
+        self.device_hint.pack(fill=tk.X, pady=(10, 0))
 
-        # —— 有效天数 ——
-        sec = self._section(inner, "有效期")
-        days_row = ttk.Frame(sec, style="TFrame")
-        days_row.pack(fill=tk.X)
+        # —— 卡片 3: 有效期与生成 ——
+        card = RoundedCard(inner, "有效期")
+        card.pack(fill=tk.X, padx=18, pady=5)
+        sec = card.inner
+        row = tk.Frame(sec, bg=CARD)
+        row.pack(fill=tk.X)
         self.days_var = tk.StringVar(value="365")
-        self.days_spin = ttk.Spinbox(days_row, from_=0, to=36500, increment=30,
-                                     textvariable=self.days_var, width=12)
+        self.days_spin = ttk.Spinbox(row, from_=0, to=36500, increment=30,
+                                     textvariable=self.days_var, width=9,
+                                     font=("TkDefaultFont", 11))
         self.days_spin.pack(side=tk.LEFT)
-        ttk.Label(days_row, text="天（0 = 永久）", foreground=MUTED).pack(side=tk.LEFT, padx=12)
+        tk.Label(row, text="天（0 = 永久）", fg=MUTED, bg=CARD,
+                 font=("TkDefaultFont", 9)).pack(side=tk.LEFT, padx=(10, 0))
+        quick = tk.Frame(row, bg=CARD)
+        quick.pack(side=tk.RIGHT)
+        for days, txt in ((30, "30 天"), (90, "90 天"), (365, "一年"), (0, "永久")):
+            RoundedButton(quick, txt, lambda d=days: self._set_days(d),
+                          variant="outline", height=28, font_size=9
+                          ).pack(side=tk.LEFT, padx=(0, 6))
 
-        # —— 生成按钮 ——
-        self.generate_btn = ttk.Button(inner, text="生成激活码", command=self._generate,
-                                       style="Accent.TButton")
-        self.generate_btn.pack(fill=tk.X, pady=(0, 14))
+        self.generate_btn = RoundedButton(sec, "生成激活码", self._generate,
+                                          variant="primary", height=42,
+                                          parent_bg=CARD, font_size=12, bold=True)
+        self.generate_btn.pack(fill=tk.X, pady=(12, 0))
 
-        # —— 激活码输出 ——
-        sec = self._section(inner, "激活码")
+        # —— 卡片 4: 激活码 ——
+        card = RoundedCard(inner, "激活码")
+        card.pack(fill=tk.X, padx=18, pady=(5, 14))
+        sec = card.inner
         self.activation_text = tk.Text(sec, height=3, wrap="word", font=("Courier", 10),
-                                       bg=CODE_BG, fg=TEXT, insertbackground=TEXT,
-                                       relief="solid", bd=1, state="disabled",
-                                       padx=10, pady=8)
+                                       bg=FIELD_BG, fg=TEXT, insertbackground=TEXT,
+                                       relief="flat", highlightthickness=1,
+                                       highlightbackground=FIELD_STROKE,
+                                       highlightcolor=PRIMARY,
+                                       state="disabled", padx=10, pady=9)
         self.activation_text.pack(fill=tk.X)
-        out_row = ttk.Frame(sec, style="TFrame")
-        out_row.pack(fill=tk.X, pady=(8, 0))
-        ttk.Button(out_row, text="复制激活码", command=self._copy_activation,
-                   style="Ghost.TButton").pack(side=tk.LEFT)
-        self.expiry_label = ttk.Label(out_row, text="", foreground=PRIMARY)
-        self.expiry_label.pack(side=tk.LEFT, padx=14)
+        row = tk.Frame(sec, bg=CARD)
+        row.pack(fill=tk.X, pady=(10, 0))
+        RoundedButton(row, "复制激活码", self._copy_activation,
+                      variant="outline", height=34).pack(side=tk.LEFT)
+        self.expiry_label = tk.Label(row, text="", fg=CODE_FG, bg=CARD,
+                                     font=("TkDefaultFont", 10, "bold"))
+        self.expiry_label.pack(side=tk.LEFT, padx=(14, 0))
 
-        # —— 底部状态栏 ——
-        self.status_var = tk.StringVar(value="就绪")
-        footer = tk.Frame(self.root, bg=PANEL, height=26)
-        footer.pack(side=tk.BOTTOM, fill=tk.X)
-        tk.Label(footer, textvariable=self.status_var, bg=PANEL, fg=PANEL_FG,
-                 font=("TkDefaultFont", 9), anchor=tk.W, padx=12).pack(fill=tk.X)
+        # 二维码区(占位 -> 生成后白框展示)
+        qr_wrap = tk.Frame(sec, bg=CARD)
+        qr_wrap.pack(fill=tk.X, pady=(12, 0))
+        self.qr_placeholder = tk.Canvas(qr_wrap, width=200, height=148,
+                                        bg=CARD, highlightthickness=0)
+        self.qr_placeholder.pack()
+        self.qr_placeholder.create_rectangle(
+            2, 2, 198, 146, dash=(5, 5), outline=BULLET, width=1.5, fill=CARD_TINT)
+        self.qr_placeholder.create_text(
+            100, 60, text="激活码二维码", fill=MUTED,
+            font=("TkDefaultFont", 10, "bold"))
+        self.qr_placeholder.create_text(
+            100, 86, text="生成激活码后在此显示", fill="#A5B2C0",
+            font=("TkDefaultFont", 9))
+
+        self.qr_holder = tk.Frame(qr_wrap, bg=FIELD_STROKE, padx=1, pady=1)
+        self.qr_image_label = tk.Label(self.qr_holder, bg="white",
+                                       padx=10, pady=10)
+        self.qr_image_label.pack()
+        self.qr_photo = None
+        self.qr_pil_image = None
+
+        self.qr_caption = tk.Label(
+            qr_wrap, text="客户可扫码激活，也可保存图片后通过聊天软件发送",
+            fg="#A5B2C0", bg=CARD, font=("TkDefaultFont", 9))
+        self.qr_caption.pack(pady=(8, 0))
+
+        self.save_qr_btn = RoundedButton(
+            qr_wrap, "保存二维码图片…", self._save_qr_image,
+            variant="outline", height=34, parent_bg=CARD)
+        self.save_qr_btn.pack(pady=(10, 0))
+        self.save_qr_btn.set_enabled(False)
+
+    # ---------------- UI 小组件 ----------------
+    def _set_days(self, days: int) -> None:
+        self.days_var.set(str(days))
+
+    def _info_tile(self, parent, title: str):
+        """设备/包名字段块(圆角浅底, 整块可点击)。"""
+        tile = _InfoTile(parent, title)
+        return tile
 
     # ---------------- 逻辑 ----------------
     def _select_private_key(self) -> None:
@@ -246,7 +638,7 @@ class KeygenApp:
             self._refresh_ui_state()
             return
         self.private_key_path = path
-        self.key_status.config(text="已加载: " + os.path.basename(path), foreground=SUCCESS)
+        self.key_status.set_loaded(os.path.basename(path))
         self.status_var.set("私钥加载成功")
         self._refresh_ui_state()
         self._on_request_changed()
@@ -269,7 +661,7 @@ class KeygenApp:
         except Exception:  # noqa: BLE001
             return
         self.private_key_path = path
-        self.key_status.config(text="已加载: " + os.path.basename(path), foreground=SUCCESS)
+        self.key_status.set_loaded(os.path.basename(path))
 
     def _paste_request(self) -> None:
         try:
@@ -279,6 +671,105 @@ class KeygenApp:
         if clip:
             self.request_var.set(clip.strip())
             self._on_request_changed()
+
+    # ---------------- 安装码二维码(图片识别) ----------------
+    def _pick_request_image(self) -> None:
+        """选择客户机发来的安装码二维码截图/照片并识别。"""
+        if cv2 is None:
+            messagebox.showinfo(
+                "缺少依赖",
+                "图片识别需要 OpenCV 依赖。\n请在项目目录执行: uv sync",
+                parent=self.root)
+            return
+        init = self.config.get("last_dir")
+        path = filedialog.askopenfilename(
+            title="选择安装码二维码图片",
+            initialdir=init if init else None,
+            filetypes=[("图片文件", "*.png *.jpg *.jpeg *.bmp *.webp"),
+                       ("所有文件", "*.*")],
+            parent=self.root)
+        if not path:
+            return
+        self.root.config(cursor="watch")
+        self.root.update_idletasks()
+        try:
+            text = self._decode_qr_image_file(path)
+        finally:
+            self.root.config(cursor="")
+        if text:
+            self._apply_scanned_request(text, source="图片")
+        else:
+            messagebox.showwarning(
+                "未识别到二维码",
+                "未在该图片中识别到二维码。\n请尝试更清晰的原图或截图，避免图片被过度压缩。",
+                parent=self.root)
+
+    def _apply_scanned_request(self, text: str, source: str = "图片") -> None:
+        if not text:
+            return
+        self.request_var.set(text.strip())
+        self._on_request_changed()
+        self.status_var.set(f"已从{source}识别安装码")
+
+    @staticmethod
+    def _decode_qr_image_file(path: str) -> str:
+        """解码本地图片中的二维码(主链路优先 + 预处理兜底)。
+
+        - 经 PIL 读取并做 EXIF 方向校正(手机照片常见旋转)
+        - 主链路: 原图及 90/180/270 旋转直接解码, 避免预处理误伤清晰图
+        - 兜底: 聊天软件压缩/低对比/光照不均时, 依次尝试放大、
+          自适应阈值二值化、对比度增强, 每个候选再跑四个方向
+        """
+        pil = ImageOps.exif_transpose(Image.open(path)).convert("RGB")
+        base = np.array(pil)[:, :, ::-1].copy()  # RGB -> BGR
+        detector = cv2.QRCodeDetector()
+
+        def try_decode(img) -> str:
+            for k in (0, 1, 2, 3):
+                text, _points, _ = detector.detectAndDecode(np.rot90(img, k))
+                if text:
+                    return text.strip()
+            return ""
+
+        # 1) 主链路: 原图 + 旋转
+        result = try_decode(base)
+        if result:
+            return result
+
+        # 2) 兜底候选(原图失败后才执行, 兼顾清晰图的速度与稳定)
+        gray = cv2.cvtColor(base, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        candidates = []
+
+        # 2a) 小图放大(截图缩略图常见, 双三次插值保留边缘)
+        scale = 1.0
+        if max(h, w) < 1000:
+            scale = min(2.0, 1200.0 / max(h, w))
+        if scale > 1.05:
+            up = cv2.resize(gray, None, fx=scale, fy=scale,
+                            interpolation=cv2.INTER_CUBIC)
+            candidates.append(cv2.cvtColor(up, cv2.COLOR_GRAY2BGR))
+
+        # 2b) 自适应阈值二值化(光照不均/阴影)
+        binary = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 31, 5)
+        candidates.append(cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR))
+
+        # 2c) CLAHE 对比度受限增强(发灰/低对比)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+        candidates.append(cv2.cvtColor(clahe, cv2.COLOR_GRAY2BGR))
+
+        # 2d) Otsu 全局二值化(整体偏暗/偏亮)
+        _ok, otsu = cv2.threshold(
+            gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        candidates.append(cv2.cvtColor(otsu, cv2.COLOR_GRAY2BGR))
+
+        for img in candidates:
+            result = try_decode(img)
+            if result:
+                return result
+        return ""
 
     def _on_request_changed(self) -> None:
         raw = self.request_var.get().strip()
@@ -392,6 +883,68 @@ class KeygenApp:
         self.expiry_label.config(text="到期: " + expiry)
         self.status_var.set(f"激活码已生成并保存 (共 {total} 条记录)")
         self._refresh_ui_state()
+        self._show_activation_qr(code)
+
+    # ---------------- 激活码二维码 ----------------
+    def _show_activation_qr(self, code_grouped: str) -> None:
+        """生成激活码二维码并内联展示。
+
+        内容为无连字符纯码(与 Android 注册机一致), M 级 15% 纠错;
+        box_size=8 时约 600px, 保存后经聊天软件压缩仍可稳定扫描。
+        """
+        if qrcode is None:
+            self.save_qr_btn.set_enabled(False)
+            self.status_var.set("缺少 qrcode/Pillow 依赖, 二维码不可用(请运行 uv sync)")
+            return
+        qr = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=8, border=2)
+        qr.add_data(reggate.Base32.ungroup(code_grouped))
+        qr.make(fit=True)
+        # convert 经 qrcode PilImage 的 __getattr__ 委托到底层 PIL.Image
+        self.qr_pil_image = qr.make_image(
+            fill_color="black", back_color="white").convert("RGB")
+
+        display = self.qr_pil_image.copy()
+        display.thumbnail((240, 240), Image.NEAREST)
+        self.qr_photo = ImageTk.PhotoImage(display)
+        self.qr_image_label.config(image=self.qr_photo, bg="white")
+        # 占位框 -> 白边二维码图
+        self.qr_placeholder.pack_forget()
+        self.qr_holder.pack(pady=(10, 0))
+        self.qr_caption.config(fg=MUTED)
+        self.save_qr_btn.set_enabled(True)
+
+    def _save_qr_image(self) -> None:
+        if self.qr_pil_image is None:
+            return
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = filedialog.asksaveasfilename(
+            title="保存激活码二维码",
+            defaultextension=".png",
+            initialfile=f"激活码二维码_{stamp}.png",
+            filetypes=[("PNG 图片", "*.png")],
+        )
+        if not path:
+            return
+        try:
+            self.qr_pil_image.save(path, format="PNG")
+        except OSError as exc:
+            messagebox.showerror("保存失败", str(exc))
+            return
+        self.status_var.set(f"二维码已保存: {path}")
+        self._reveal_in_file_manager(path)
+
+    @staticmethod
+    def _reveal_in_file_manager(path: str) -> None:
+        """保存后在系统文件管理器中定位文件, 方便直接拖入聊天软件发送。"""
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", path])
+            elif sys.platform.startswith("win"):
+                subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+            else:
+                subprocess.Popen(["xdg-open", os.path.dirname(path)])
+        except OSError:
+            pass
 
     def _copy_activation(self) -> None:
         code = self.activation_text.get(1.0, "end-1c").strip()
@@ -403,7 +956,7 @@ class KeygenApp:
 
     def _refresh_ui_state(self) -> None:
         has_key = self.private_key is not None
-        self.generate_btn.config(state=tk.NORMAL if has_key else tk.DISABLED)
+        self.generate_btn.set_enabled(has_key)
 
     # ---------------- 记录保存位置 ----------------
     def _choose_save_location(self) -> None:
@@ -486,7 +1039,7 @@ class RecordsViewer(tk.Toplevel):
                                 font=("TkDefaultFont", 10))
         self.summary.pack(side=tk.LEFT, padx=10, pady=12)
         ttk.Button(header, text="刷新", command=self._refresh,
-                   style="Ghost.TButton").pack(side=tk.RIGHT, padx=16, pady=8)
+                   style="Header.TButton").pack(side=tk.RIGHT, padx=16, pady=8)
 
         # 按ID查询（设备ID / 记录ID）—— 放在查看记录窗口内
         search_bar = tk.Frame(self, bg=BG)

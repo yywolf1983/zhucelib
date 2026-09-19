@@ -11,14 +11,28 @@
 
     <string name="kg_section_gen">生成激活码</string>
     <string name="kg_request_code_label">客户机安装码</string>
-    <string name="kg_request_code_hint">粘贴安装码</string>
-    <string name="kg_paste_request">粘贴安装码</string>
+    <string name="kg_request_code_hint">粘贴、扫码或从相册识别安装码</string>
+    <string name="kg_paste_request">粘贴</string>
+    <string name="kg_scan_request">扫码</string>
+    <string name="kg_pick_request_qr">相册</string>
+    <string name="kg_scan_request_prompt">将客户机安装码二维码放入框内</string>
+    <string name="kg_request_qr_recognized">安装码已识别</string>
+    <string name="kg_qr_not_found">未在图片中识别到二维码</string>
+    <string name="kg_qr_load_failed">图片读取失败,请重试</string>
     <string name="kg_query_device">查询此设备</string>
     <string name="kg_valid_days_label">购买时长(天,0 = 永久)</string>
     <string name="kg_valid_days_hint">例如 30</string>
     <string name="kg_generate">生成激活码</string>
     <string name="kg_activation_code_label">激活码(发回给客户机)</string>
     <string name="kg_copy_activation">复制激活码</string>
+    <string name="kg_activation_qr">激活码二维码</string>
+    <string name="kg_activation_qr_caption">客户可直接扫码激活，也可保存/发送图片</string>
+    <string name="kg_save_qr">保存二维码</string>
+    <string name="kg_share_qr">发送二维码</string>
+    <string name="kg_qr_saved">二维码已保存到相册</string>
+    <string name="kg_qr_save_failed">保存失败,请重试</string>
+    <string name="kg_qr_share_failed">发送失败,请重试</string>
+    <string name="kg_qr_send_chooser">发送二维码到</string>
 
     <string name="kg_section_records">注册记录</string>
     <string name="kg_view_records">查看记录</string>

@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="@drawable/reggate_dialog_bg"
+    android:padding="20dp">
+
+    <TextView
+        android:id="@+id/reggate_qr_dialog_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/reggate_text_main"
+        tools:ignore="HardcodedText"
+        tools:text="本机安装码二维码" />
+
+    <TextView
+        android:id="@+id/reggate_qr_dialog_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:gravity="center"
+        android:textSize="11sp"
+        android:lineSpacingExtra="2dp"
+        android:textColor="@color/reggate_text_sub"
+        tools:ignore="HardcodedText"
+        tools:text="请对方使用注册机扫描，或保存图片发送" />
+
+    <ImageView
+        android:id="@+id/reggate_qr_dialog_image"
+        android:layout_width="240dp"
+        android:layout_height="240dp"
+        android:layout_marginTop="14dp"
+        android:padding="8dp"
+        android:background="@drawable/reggate_bg_qr_frame"
+        android:scaleType="fitCenter"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/reggate_qr_dialog_code"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:textIsSelectable="true"
+        android:textSize="10sp"
+        android:textColor="@color/reggate_text_blue"
+        tools:ignore="HardcodedText"
+        tools:text="ABCD-EFGH-IJKL-MNOP" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="14dp">
+
+        <LinearLayout
+            android:id="@+id/reggate_qr_dialog_save"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/reggate_bg_chip_ghost"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/reggate_ic_save"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/reggate_qr_dialog_save_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textColor="@color/reggate_text_blue"
+                android:textSize="12sp"
+                tools:ignore="HardcodedText"
+                tools:text="保存图片" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="10dp"
+            android:layout_height="0dp" />
+
+        <LinearLayout
+            android:id="@+id/reggate_qr_dialog_share"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/reggate_bg_chip_blue"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp">
+
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@drawable/reggate_ic_share"
+                android:contentDescription="@null" />
+
+            <TextView
+                android:id="@+id/reggate_qr_dialog_share_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:textStyle="bold"
+                android:textColor="@color/reggate_text_blue"
+                android:textSize="12sp"
+                tools:ignore="HardcodedText"
+                tools:text="发送图片" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/reggate_qr_dialog_close"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:paddingLeft="20dp"
+        android:paddingRight="20dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:textSize="12sp"
+        android:textColor="@color/reggate_text_sub"
+        tools:ignore="HardcodedText"
+        tools:text="关闭" />
+
+</LinearLayout>

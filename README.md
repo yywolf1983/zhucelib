@@ -111,6 +111,24 @@ public class MyApplication extends Application {
 
 > **重要**：注册库的所有资源（字符串、颜色、样式、布局）都已内置在库中。**不要在应用项目中硬编码任何 `reggate_` 前缀的资源**，否则会导致资源版本不一致。详见 [INSTALL.md](INSTALL.md) 中的「避免硬编码资源」章节。
 
+### 二维码全流程
+
+安装码与激活码双向支持二维码，激活界面与注册机均无需宿主编写任何代码：
+
+- **激活界面（客户端）**
+  - 安装码：卡片内可一键展示二维码大图，支持**保存到相册 / 发送图片**（微信/QQ 等，经 FileProvider）
+  - 激活码：**扫码激活**（调起相机，双机场景）与**相册识别**（单机收图场景，零权限）
+- **注册机**：安装码输入框旁提供**扫码**（相机）与**相册**（图片识别，零权限）两个入口，识别后自动回填并解析设备/包名
+- **Python 注册机**：安装码支持「图片识别…」（选图本地解码，含 EXIF 校正/多旋转/二值化兜底）
+
+依赖与权限由库经 manifest merger 自动并入宿主，宿主 APK 体积增加约 0.25MB（release，未裁剪）：
+
+| 项 | 说明 |
+|---|---|
+| 传递依赖 | `com.journeyapps:zxing-android-embedded:4.3.0` + `com.google.zxing:core:3.3.0`（锁定 3.3.0 以兼容 minSdk 21，无需 desugaring） |
+| 新增权限 | `android.permission.CAMERA`（`uses-feature` 均声明 `required="false"`，无相机设备仍可安装）；图片分享经 `${applicationId}.reggate.fileprovider` 自动声明 |
+| 移除 | 删除依赖与按钮即可，注册/验签逻辑与二维码完全解耦 |
+
 ## 配置项
 
 | 方法 | 参数 | 默认值 | 说明 |
@@ -149,14 +167,22 @@ int licenseRemainingDays = manager.getLicenseRemainingDays();  // -1=永久
 
 ## 注册机使用
 
-1. 安装 `keygen-app` APK
+1. 安装 `keygen-app` APK（或运行 Python 版 `keygen-py`）
 2. 点击「选择私钥文件」，选择 `reggate_priv.pem`
-3. 输入客户机的安装码
+3. 获取客户机的安装码（三选一）：
+   - 手动粘贴文本
+   - 客户机在激活界面点「二维码」展示/发送安装码图片，注册机点「扫码」对准扫描
+   - 收到安装码图片后点「相册」（Python 版为「图片识别…」）本地识别
 4. 输入购买天数（0 = 永久）
 5. 点击「生成激活码」
-6. 复制激活码发给客户机
+6. 通过任一方式发回客户机：
+   - 复制激活码文本
+   - **发送二维码**：直接调起系统分享（微信/QQ 等），客户机用「扫码激活」扫描
+   - **保存二维码**：存到相册（Python 版保存后自动在文件管理器中定位），客户机也可保存图片后用「相册识别」
 
 > **私钥路径会自动记住**，下次启动无需重新选择。
+>
+> 两种二维码内容均为无连字符纯码（安装码 420 字符、激活码 420 字符，version 13 / M 级纠错），与手动输入完全等价；聊天软件压缩图片后仍可稳定扫描（Python 解码含旋转校正与二值化兜底）。
 
 ## 安全模型
 
@@ -183,4 +209,5 @@ int licenseRemainingDays = manager.getLicenseRemainingDays();  // -1=永久
 | 加密算法 | RSA-2048 + SHA256withRSA |
 | 签名协议 | 挑战-响应(设备指纹 + 随机 nonce) |
 | 编码方式 | Crockford Base32 |
+| 二维码 | ZXing core 3.3.0 + zxing-android-embedded 4.3.0（Python 版 qrcode 8.x + opencv-python-headless） |
 | 最小 SDK | API 21(Android 5.0) |

@@ -1,12 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
+hiddenimports = [
+    'qrcode', 'qrcode.image.pil', 'PIL.Image', 'PIL.ImageTk',
+    'cv2', 'numpy',
+]
+hiddenimports += collect_submodules('cv2')
+
 
 a = Analysis(
     ['keygen_gui.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

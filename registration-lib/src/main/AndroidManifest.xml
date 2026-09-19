@@ -4,6 +4,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- 扫描激活码二维码(相册识别不需要权限, 仅相机扫码需要) -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application>
         <!-- 注册门:应用真正入口,置于宿主主界面之前 -->
         <activity
@@ -25,6 +30,23 @@
             android:name=".ExpiredNagActivity"
             android:exported="false"
             android:theme="@style/Theme.RegGate.Dialog" />
+
+        <!-- 强制竖屏的二维码扫码界面 -->
+        <activity
+            android:name=".PortraitCaptureActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- 安装码二维码图片分享(经 manifest merger 并入宿主, authority 随宿主包名) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.reggate.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/reggate_file_paths" />
+        </provider>
     </application>
 
 </manifest>

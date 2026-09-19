@@ -8,9 +8,23 @@
     <string name="reggate_activation_code_hint">在此粘贴激活码</string>
     <string name="reggate_paste">粘贴</string>
     <string name="reggate_activate">激活</string>
+    <string name="reggate_scan_qr">扫码激活</string>
+    <string name="reggate_pick_qr">相册识别</string>
+    <string name="reggate_scan_prompt">将激活码二维码放入框内</string>
+    <string name="reggate_scan_request_prompt">将安装码二维码放入框内</string>
+    <string name="reggate_request_qr_recognized">安装码已识别</string>
+    <string name="reggate_show_request_qr">二维码</string>
+    <string name="reggate_request_qr_title">本机安装码二维码</string>
+    <string name="reggate_request_qr_subtitle">请卖家使用注册机「扫码」读取，\n或保存/发送图片给卖家</string>
+    <string name="reggate_qr_dialog_save">保存图片</string>
+    <string name="reggate_qr_dialog_share">发送图片</string>
+    <string name="reggate_qr_dialog_close">关闭</string>
+    <string name="reggate_qr_chooser_title">发送安装码二维码</string>
+    <string name="reggate_qr_not_found">未在图片中识别到二维码</string>
+    <string name="reggate_qr_load_failed">图片读取失败,请重试</string>
     <string name="reggate_request_copied">安装码已复制</string>
     <string name="reggate_activate_success">激活成功</string>
-    <string name="reggate_how_to">复制安装码获取激活码后粘贴到此处并点击"激活"。</string>
+    <string name="reggate_how_to">将安装码发给卖家获取激活码，粘贴或扫码后点击"激活"。</string>
 
     <string name="reggate_hint_trial_remaining">您当前处于试用期,剩余 %1$d 天</string>
     <string name="reggate_hint_need_activate">请输入激活码以激活应用</string>
@@ -45,5 +59,6 @@
     <string name="reggate_save_qr">保存二维码</string>
     <string name="reggate_save_qr_success">二维码已保存到相册</string>
     <string name="reggate_save_qr_failed">保存失败,请重试</string>
+    <string name="reggate_qr_share_failed">发送失败,请重试</string>
 
 </resources>
