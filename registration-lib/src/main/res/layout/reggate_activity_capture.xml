@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 库自研竖屏扫码界面(Camera1 预览 + 居中取景框 + 提示/取消),
+     不依赖 zxing-android-embedded, 保证本地 AAR 集成时自包含。 -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000">
+
+    <SurfaceView
+        android:id="@+id/reggate_capture_preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <View
+        android:id="@+id/reggate_capture_frame"
+        android:layout_width="240dp"
+        android:layout_height="240dp"
+        android:layout_centerInParent="true"
+        android:background="@drawable/reggate_bg_scan_frame" />
+
+    <TextView
+        android:id="@+id/reggate_capture_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/reggate_capture_frame"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="18dp"
+        android:background="#80000000"
+        android:paddingLeft="14dp"
+        android:paddingTop="7dp"
+        android:paddingRight="14dp"
+        android:paddingBottom="7dp"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        tools:ignore="HardcodedText"
+        tools:text="将激活码二维码放入框内"
+        xmlns:tools="http://schemas.android.com/tools" />
+
+    <TextView
+        android:id="@+id/reggate_capture_cancel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/reggate_capture_frame"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="26dp"
+        android:background="#80000000"
+        android:paddingLeft="26dp"
+        android:paddingTop="9dp"
+        android:paddingRight="26dp"
+        android:paddingBottom="9dp"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:text="@android:string/cancel" />
+
+</RelativeLayout>
