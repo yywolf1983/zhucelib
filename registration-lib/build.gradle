@@ -86,13 +86,10 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.9.0'
 
-    // 二维码扫描(相机界面) + 相册图片解码
-    // embedded 4.3.0 默认传递 core 3.4.x(需 API 24+), 项目 minSdk 21,
-    // 按官方方案锁定 core 3.3.0, 无需 desugaring
-    implementation('com.journeyapps:zxing-android-embedded:4.3.0') {
-        exclude group: 'com.google.zxing', module: 'core'
-    }
-    implementation 'com.google.zxing:core:3.3.0'
+    // 二维码编解码(zxing core, 纯 Java 无资源)。
+    // 以本地 JAR 方式引入会被直接打进 AAR 的 libs/, 使宿主以本地 AAR 文件
+    // (implementation files('xxx.aar')) 集成时也能获得这些类 —— 本地 AAR 不携带
+    // 传递依赖, 若改用 Maven 坐标声明, 宿主会因缺类 NoClassDefFoundError 崩溃。
+    implementation files('libs/zxing-core-3.3.0.jar')
 }

@@ -43,7 +43,8 @@ public final class RegGateActivityCallbacks implements Application.ActivityLifec
         if (cls == RegistrationGateActivity.class
                 || cls == RegistrationActivity.class
                 || cls == TrialDialogActivity.class
-                || cls == ExpiredNagActivity.class) {
+                || cls == ExpiredNagActivity.class
+                || cls == PortraitCaptureActivity.class) {
             return;
         }
 

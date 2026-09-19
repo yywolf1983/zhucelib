@@ -151,7 +151,8 @@ public final class RegistrationManager {
         if (cls == RegistrationGateActivity.class
                 || cls == RegistrationActivity.class
                 || cls == TrialDialogActivity.class
-                || cls == ExpiredNagActivity.class) {
+                || cls == ExpiredNagActivity.class
+                || cls == PortraitCaptureActivity.class) {
             return;
         }
 
@@ -192,7 +193,8 @@ public final class RegistrationManager {
         if (cls == RegistrationGateActivity.class
                 || cls == RegistrationActivity.class
                 || cls == TrialDialogActivity.class
-                || cls == ExpiredNagActivity.class) {
+                || cls == ExpiredNagActivity.class
+                || cls == PortraitCaptureActivity.class) {
             return;
         }
         startRegistrationActivity(activity, false);

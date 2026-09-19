@@ -30,8 +30,6 @@ import android.widget.Toast;
 import androidx.core.content.FileProvider;
 
 import com.google.zxing.NotFoundException;
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,6 +42,7 @@ public class RegistrationActivity extends Activity {
 
     private static final int REQ_PICK_QR_IMAGE = 0x2001;
     private static final int REQ_PERM_SAVE_QR = 0x2002;
+    private static final int REQ_SCAN_QR = 0x2003;
 
     public static final String EXTRA_APP_NAME = "extra_app_name";
     public static final String EXTRA_EXPIRED = "extra_expired";
@@ -234,13 +233,8 @@ public class RegistrationActivity extends Activity {
     // ==================== 二维码(相机扫描 / 相册识别) ====================
 
     private void startQrScan() {
-        IntentIntegrator integrator = new IntentIntegrator(this);
-        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
-        integrator.setPrompt(RegGateResources.getString(this, "reggate_scan_prompt"));
-        integrator.setBeepEnabled(true);
-        integrator.setCaptureActivity(PortraitCaptureActivity.class);
-        integrator.setOrientationLocked(true);
-        integrator.initiateScan();
+        Intent intent = new Intent(this, PortraitCaptureActivity.class);
+        startActivityForResult(intent, REQ_SCAN_QR);
     }
 
     private void pickQrImage() {
@@ -281,11 +275,13 @@ public class RegistrationActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
-        if (scanResult != null) {
-            // 相机扫码返回; 用户取消时 contents 为 null, 静默忽略
-            if (scanResult.getContents() != null) {
-                applyScannedCode(scanResult.getContents());
+        if (requestCode == REQ_SCAN_QR) {
+            // 自研竖屏扫码页返回; 用户取消时无数据, 静默忽略
+            if (resultCode == RESULT_OK && data != null) {
+                String contents = data.getStringExtra(PortraitCaptureActivity.EXTRA_SCAN_RESULT);
+                if (!TextUtils.isEmpty(contents)) {
+                    applyScannedCode(contents);
+                }
             }
             return;
         }

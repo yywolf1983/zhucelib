@@ -22,6 +22,5 @@
 -keep class org.bouncycastle.crypto.** { *; }
 -keep class org.bouncycastle.math.** { *; }
 
-# ZXing 二维码扫描/解码(相机扫码界面与 core 解码类)
+# ZXing core 二维码编解码(已作为本地 JAR 打进 AAR 的 libs/)
 -keep class com.google.zxing.** { *; }
--keep class com.journeyapps.barcodescanner.** { *; }
