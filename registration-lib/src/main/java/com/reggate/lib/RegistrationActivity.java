@@ -185,6 +185,14 @@ public class RegistrationActivity extends Activity {
         });
 
         if (getActionBar() != null) getActionBar().hide();
+
+        RegistrationManager.markGateOverlayActive(this);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        RegistrationManager.markGateOverlayInactive(this);
     }
 
     private void showRequestCode() {

@@ -71,6 +71,13 @@ public class ExpiredNagActivity extends Activity {
                 finish();
             });
         }
+        RegistrationManager.markGateOverlayActive(this);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        RegistrationManager.markGateOverlayInactive(this);
     }
 
     @Override

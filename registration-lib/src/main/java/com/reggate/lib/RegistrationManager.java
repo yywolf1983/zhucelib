@@ -146,6 +146,19 @@ public final class RegistrationManager {
     private static final java.util.WeakHashMap<android.app.Application, Boolean> GUARD_INSTALLED =
             new java.util.WeakHashMap<>();
 
+    // 当前是否有注册库弹出的覆盖页(试用框/到期提示/注册页)处于活跃状态。
+    // 用于避免生命周期守卫在每次 Activity 启动时重复叠加多个弹窗,
+    // 也保证弹窗在被其它页面覆盖(仍在栈中)时不会被视为"已消失"而重复弹出。
+    private static final java.util.concurrent.atomic.AtomicReference<android.app.Activity> sActiveGateOverlay =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+    static void markGateOverlayActive(android.app.Activity a) { sActiveGateOverlay.set(a); }
+    static void markGateOverlayInactive(android.app.Activity a) { sActiveGateOverlay.compareAndSet(a, null); }
+    static boolean isGateOverlayActive() {
+        android.app.Activity a = sActiveGateOverlay.get();
+        return a != null && !a.isFinishing();
+    }
+
     public void enforceRegistration(android.app.Activity activity) {
         Class<?> cls = activity.getClass();
         if (cls == RegistrationGateActivity.class
@@ -212,11 +225,15 @@ public final class RegistrationManager {
             markTrialPromptNow();
         }
 
+        // 已有弹窗/注册页显示时不再叠加(避免每次 Activity 启动重复弹出)
+        if (isGateOverlayActive()) return;
+
         Intent it = new Intent(activity, TrialDialogActivity.class);
         it.putExtra(TrialDialogActivity.EXTRA_APP_NAME, config.getAppName());
         it.putExtra(TrialDialogActivity.EXTRA_TRIAL_DAYS, getEffectiveTrialDays());
         it.putExtra(TrialDialogActivity.EXTRA_REMAINING_DAYS, getTrialRemainingDays());
-        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        // 注意: 不附加 NEW_TASK/CLEAR_TOP, 使弹窗叠在宿主任务栈之上,
+        // 不会被宿主内切换其它页面而移入后台"消失"。
         activity.startActivity(it);
     }
 
@@ -255,6 +272,7 @@ public final class RegistrationManager {
     }
 
     private void startRegistrationActivity(android.app.Activity activity, boolean expired) {
+        if (isGateOverlayActive()) return;
         boolean tampered = isTimeTampered();
         boolean anomaly = isAnomaly();
         Intent it = new Intent(activity, RegistrationActivity.class);
@@ -264,17 +282,18 @@ public final class RegistrationManager {
         it.putExtra(RegistrationActivity.EXTRA_ANOMALY, anomaly);
         it.putExtra(RegistrationActivity.EXTRA_TRIAL_REMAINING_DAYS, getTrialRemainingDays());
         it.putExtra(RegistrationActivity.EXTRA_LICENSE_REMAINING_DAYS, getLicenseRemainingDays());
-        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        // 不附加 NEW_TASK/CLEAR_TOP, 使注册页叠在宿主任务栈, 不被其它页面顶掉。
         activity.startActivity(it);
     }
 
     private void startExpiredNagActivity(android.app.Activity activity) {
+        if (isGateOverlayActive()) return;
         boolean licenseExpired = getLicenseExpiryMs() != null;
         Intent it = new Intent(activity, ExpiredNagActivity.class);
         it.putExtra(ExpiredNagActivity.EXTRA_APP_NAME, config.getAppName());
         it.putExtra(ExpiredNagActivity.EXTRA_TRIAL_EXPIRED, !licenseExpired);
         it.putExtra(ExpiredNagActivity.EXTRA_LICENSE_REMAINING, getLicenseRemainingDays());
-        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        // 不附加 NEW_TASK/CLEAR_TOP, 弹窗叠在宿主任务栈之上, 不被其它页面顶掉。
         activity.startActivity(it);
     }
 
