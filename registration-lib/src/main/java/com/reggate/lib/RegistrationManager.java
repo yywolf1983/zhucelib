@@ -152,12 +152,28 @@ public final class RegistrationManager {
     private static final java.util.concurrent.atomic.AtomicReference<android.app.Activity> sActiveGateOverlay =
             new java.util.concurrent.atomic.AtomicReference<>();
 
-    static void markGateOverlayActive(android.app.Activity a) { sActiveGateOverlay.set(a); }
+    static void markGateOverlayActive(android.app.Activity a) {
+        sActiveGateOverlay.set(a);
+        // 任何注册库覆盖页(试用框/到期提示/注册页)一旦展示,即标记"本次前台会话已弹过",
+        // 避免多 Activity 切换、或"门 Activity 作 LAUNCHER 与生命周期守卫并存"时
+        // 每次 Activity 启动都重复弹窗(即用户反馈的"两次弹窗")。
+        sGateShownThisForeground.set(true);
+    }
     static void markGateOverlayInactive(android.app.Activity a) { sActiveGateOverlay.compareAndSet(a, null); }
     static boolean isGateOverlayActive() {
         android.app.Activity a = sActiveGateOverlay.get();
         return a != null && !a.isFinishing();
     }
+
+    // 本次前台会话是否已展示过覆盖页。与 sActiveGateOverlay(仅判断"当前是否仍可见")不同,
+    // 此标记在覆盖页创建时即置位,用于拦截"已弹过之后再次 enforceRegistration"的重复弹出。
+    // 应用真正退到后台再回到前台时由 RegGateActivityCallbacks 重置。
+    private static final java.util.concurrent.atomic.AtomicBoolean sGateShownThisForeground =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    static void markGateShownThisSession() { sGateShownThisForeground.set(true); }
+    static void resetGateSession() { sGateShownThisForeground.set(false); }
+    static boolean isGateShownThisSession() { return sGateShownThisForeground.get(); }
 
     public void enforceRegistration(android.app.Activity activity) {
         Class<?> cls = activity.getClass();
@@ -166,6 +182,12 @@ public final class RegistrationManager {
                 || cls == TrialDialogActivity.class
                 || cls == ExpiredNagActivity.class
                 || cls == PortraitCaptureActivity.class) {
+            return;
+        }
+
+        // 本次前台会话已经弹过注册/试用框, 不再重复弹出(避免多 Activity 切换或
+        // 门 Activity 作 LAUNCHER 与生命周期守卫并存导致的"两次弹窗")。
+        if (isGateShownThisSession()) {
             return;
         }
 
@@ -228,6 +250,7 @@ public final class RegistrationManager {
         // 已有弹窗/注册页显示时不再叠加(避免每次 Activity 启动重复弹出)
         if (isGateOverlayActive()) return;
 
+        markGateShownThisSession();
         Intent it = new Intent(activity, TrialDialogActivity.class);
         it.putExtra(TrialDialogActivity.EXTRA_APP_NAME, config.getAppName());
         it.putExtra(TrialDialogActivity.EXTRA_TRIAL_DAYS, getEffectiveTrialDays());
@@ -273,6 +296,7 @@ public final class RegistrationManager {
 
     private void startRegistrationActivity(android.app.Activity activity, boolean expired) {
         if (isGateOverlayActive()) return;
+        markGateShownThisSession();
         boolean tampered = isTimeTampered();
         boolean anomaly = isAnomaly();
         Intent it = new Intent(activity, RegistrationActivity.class);
@@ -288,6 +312,7 @@ public final class RegistrationManager {
 
     private void startExpiredNagActivity(android.app.Activity activity) {
         if (isGateOverlayActive()) return;
+        markGateShownThisSession();
         boolean licenseExpired = getLicenseExpiryMs() != null;
         Intent it = new Intent(activity, ExpiredNagActivity.class);
         it.putExtra(ExpiredNagActivity.EXTRA_APP_NAME, config.getAppName());

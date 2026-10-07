@@ -22,6 +22,14 @@ public final class RegGateActivityCallbacks implements Application.ActivityLifec
     // 记录已挂载入口的 Activity,保证每个 app 至少出现一个入口且不重复挂载。
     private static final WeakHashMap<Activity, Boolean> INJECTED = new WeakHashMap<>();
 
+    // 处于 STARTED 状态的 Activity 计数, 用于判断应用是否真正回到前台。
+    private int startedCount = 0;
+    // 应用退到后台后, 延迟一小段时间再重置"本次前台会话已弹窗"标记,
+    // 避免 CLEAR_TASK/配置变更造成的瞬时 0 计数误把标记清空(否则门 Activity 作 LAUNCHER
+    // 与新守卫并存时会再次弹窗, 即"两次弹窗")。
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable pendingReset;
+
     private final RegistrationManager manager;
 
     public RegGateActivityCallbacks(RegistrationManager manager) {
@@ -33,6 +41,12 @@ public final class RegGateActivityCallbacks implements Application.ActivityLifec
 
     @Override
     public void onActivityStarted(Activity activity) {
+        // 有新的 Activity 进入前台, 取消可能挂起的后台判定。
+        if (pendingReset != null) {
+            handler.removeCallbacks(pendingReset);
+            pendingReset = null;
+        }
+        startedCount++;
         manager.enforceRegistration(activity);
     }
 
@@ -74,7 +88,18 @@ public final class RegGateActivityCallbacks implements Application.ActivityLifec
     public void onActivityPaused(Activity activity) {}
 
     @Override
-    public void onActivityStopped(Activity activity) {}
+    public void onActivityStopped(Activity activity) {
+        startedCount = Math.max(0, startedCount - 1);
+        if (startedCount == 0) {
+            // 所有 Activity 都已停止, 延迟判定为真正进入后台; 若短时间内又有 Activity 启动
+            // (如门 Activity 用 CLEAR_TASK 跳转主界面), 上面的 onActivityStarted 会取消本次重置。
+            pendingReset = () -> {
+                RegistrationManager.resetGateSession();
+                pendingReset = null;
+            };
+            handler.postDelayed(pendingReset, 1000);
+        }
+    }
 
     @Override
     public void onActivitySaveInstanceState(Activity activity, Bundle bundle) {}
