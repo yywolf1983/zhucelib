@@ -61,6 +61,10 @@ public final class RegGateActivityCallbacks implements Application.ActivityLifec
                 || cls == PortraitCaptureActivity.class) {
             return;
         }
+        // 宿主声明的豁免 Activity(如启动页)不注入注册入口按钮
+        if (manager.getConfig().getExemptActivities().contains(cls)) {
+            return;
+        }
 
         // 已挂载:仅同步显隐(注册返回后隐藏)。
         if (activity.findViewById(FAB_TAG_ID) != null) {

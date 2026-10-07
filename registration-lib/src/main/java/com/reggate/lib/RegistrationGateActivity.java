@@ -12,6 +12,8 @@ public class RegistrationGateActivity extends Activity {
 
     private RegistrationManager manager;
     private boolean routed = false;
+    // 防止配置变更重建导致 handleTrialing 的 postDelayed 被重复投递而弹两次
+    private boolean trialPosting = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,6 +61,11 @@ public class RegistrationGateActivity extends Activity {
             return;
         }
 
+        // 已有注册库弹窗在显示(守卫/本 Activity 上次已弹),不再重复弹,静候其 onActivityResult
+        if (RegistrationManager.isGateOverlayActive()) {
+            return;
+        }
+
         if (timing == RegGateConfig.PromptTiming.FIRST_LAUNCH) {
             manager.markTrialDialogShown();
         } else if (timing == RegGateConfig.PromptTiming.INTERVAL_DAYS) {
@@ -66,6 +73,9 @@ public class RegistrationGateActivity extends Activity {
             manager.markTrialPromptNow();
         }
 
+        if (trialPosting) return;   // 防配置变更重建导致 postDelayed 被重复投递
+        trialPosting = true;
+        RegistrationManager.markGateShownThisSession();
         final long delayMs = manager.getConfig().getFirstTrialDialogDelayMs();
         new Handler().postDelayed(() -> {
             if (isFinishing()) return;
@@ -78,6 +88,11 @@ public class RegistrationGateActivity extends Activity {
     }
 
     private void handleExpired() {
+        // 已有注册库弹窗在显示(守卫/本 Activity 上次已弹),不再重复弹,静候其 onActivityResult
+        if (RegistrationManager.isGateOverlayActive()) {
+            return;
+        }
+
         // 异常状态下强制跳转注册页面，忽略 NAG_ONLY 配置
         if (manager.isAnomaly()) {
             startRegistrationActivity(true);

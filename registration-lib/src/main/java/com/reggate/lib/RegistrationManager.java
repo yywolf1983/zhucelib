@@ -184,6 +184,10 @@ public final class RegistrationManager {
                 || cls == PortraitCaptureActivity.class) {
             return;
         }
+        // 宿主声明的豁免 Activity(如启动页)不弹注册框,避免与门 Activity 重复/被 CLEAR_TASK 清除
+        if (config.getExemptActivities().contains(cls)) {
+            return;
+        }
 
         // 本次前台会话已经弹过注册/试用框, 不再重复弹出(避免多 Activity 切换或
         // 门 Activity 作 LAUNCHER 与生命周期守卫并存导致的"两次弹窗")。

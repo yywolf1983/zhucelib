@@ -85,6 +85,8 @@ public final class RegGateConfig {
     private final int trialPromptIntervalDays;
     private final String appName;
     private final ContactInfo contactInfo;
+    /** 宿主声明的豁免 Activity:守卫不对其弹注册框/注入入口按钮(如启动页)。 */
+    private final java.util.List<Class<?>> exemptActivities;
 
     private RegGateConfig(Builder b) {
         this.publicKeyBase64 = b.publicKeyBase64;
@@ -96,6 +98,7 @@ public final class RegGateConfig {
         this.trialPromptIntervalDays = b.trialPromptIntervalDays;
         this.appName = b.appName;
         this.contactInfo = b.contactInfo;
+        this.exemptActivities = b.exemptActivities;
     }
 
     /**
@@ -162,6 +165,8 @@ public final class RegGateConfig {
     /** INTERVAL_DAYS 模式下两次试用弹框之间的最小间隔天数(>=1)。 */
     public int getTrialPromptIntervalDays() { return trialPromptIntervalDays; }
     public String getAppName() { return appName; }
+    /** 返回宿主声明的豁免 Activity 列表(守卫对其不弹框/不注入入口)。 */
+    public java.util.List<Class<?>> getExemptActivities() { return exemptActivities; }
 
     public long getTrialDurationMs() {
         return trialDays > 0 ? trialDays * 24L * 60L * 60L * 1000L : 0L;
@@ -191,6 +196,7 @@ public final class RegGateConfig {
         private int trialPromptIntervalDays = DEFAULT_TRIAL_PROMPT_INTERVAL_DAYS;
         private String appName;
         private ContactInfo contactInfo;
+        private java.util.List<Class<?>> exemptActivities = new java.util.ArrayList<>();
 
         private boolean trialDaysSet = false;
         private boolean promptTimingSet = false;
@@ -255,6 +261,13 @@ public final class RegGateConfig {
         public Builder contactInfo(ContactInfo info) {
             this.contactInfo = info;
             this.contactInfoSet = true;
+            return this;
+        }
+
+        /** 声明守卫豁免的宿主 Activity(如启动页 SplashScreenActivity):
+         *  守卫不对其弹注册框、也不注入注册入口按钮,避免与门 Activity 重复弹窗。 */
+        public Builder exemptActivity(Class<?>... classes) {
+            for (Class<?> c : classes) this.exemptActivities.add(c);
             return this;
         }
 
